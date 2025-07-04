@@ -309,7 +309,7 @@ public:
     return target_big_endian ? to_be(res) : res;
   }
 
-  inline icache_entry_t* refill_icache(reg_t addr, icache_entry_t* entry)
+  inline icache_entry_t* refill_icache(reg_t addr, icache_entry_t* entry) //M:: Fetching
   {
     insn_bits_t insn = fetch_insn_parcel(addr);
 
@@ -329,7 +329,7 @@ public:
       insn |= (insn_bits_t)fetch_insn_parcel(addr + 6) << 48;
     }
 
-    insn_fetch_t fetch = {proc->decode_insn(insn), insn};
+    insn_fetch_t fetch = {proc->decode_insn(insn), insn}; //M:: fetched data is decoded here
     entry->tag = addr;
     entry->next = &icache[icache_index(addr + length)];
     entry->data = fetch;
@@ -355,10 +355,10 @@ public:
     return refill_icache(addr, entry);
   }
 
-  inline insn_fetch_t load_insn(reg_t addr)
+  inline insn_fetch_t load_insn(reg_t addr) //M:: fetch instruction from icache
   {
     icache_entry_t entry;
-    return refill_icache(addr, &entry)->data;
+    return refill_icache(addr, &entry)->data; //M:: getting instruction from icache
   }
 
   std::tuple<bool, uintptr_t, reg_t> ALWAYS_INLINE access_tlb(const dtlb_entry_t* tlb, reg_t vaddr, reg_t allowed_flags = 0, reg_t required_flags = 0)
@@ -497,7 +497,7 @@ private:
     }
   }
 
-  inline insn_parcel_t fetch_insn_parcel(reg_t addr) {
+  inline insn_parcel_t fetch_insn_parcel(reg_t addr) { //M:: Fetch
     if (auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_insn, addr); tlb_hit)
       return from_le(*(insn_parcel_t*)host_addr);
 

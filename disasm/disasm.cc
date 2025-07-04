@@ -242,7 +242,7 @@ struct : public arg_t {
     s += std::to_string(abs(target));
     return s;
   }
-} branch_target;
+} branch_target; //M:: 
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
@@ -252,25 +252,25 @@ struct : public arg_t {
     s << "pc " << sign << std::hex << " 0x" << abs(target);
     return s.str();
   }
-} jump_target;
+} jump_target; //M:: 
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
     return xpr_name[insn.rvc_rs1()];
   }
-} rvc_rs1;
+} rvc_rs1; //M:: 
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
     return xpr_name[insn.rvc_rs2()];
   }
-} rvc_rs2;
+} rvc_rs2; //M:: 
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
     return fpr_name[insn.rvc_rs2()];
   }
-} rvc_fp_rs2;
+} rvc_fp_rs2; //M:: 
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
@@ -2280,7 +2280,7 @@ const disasm_insn_t* disassembler_t::lookup(insn_t insn) const
   return probe_once(insn, HASH_SIZE);
 }
 
-void NOINLINE disassembler_t::add_insn(disasm_insn_t* insn)
+void NOINLINE disassembler_t::add_insn(disasm_insn_t* insn) //M:: what is this chain of instructions
 {
   size_t idx =
     (insn->get_mask() & MASK1) == MASK1 ? hash(insn->get_match(), MASK1) :

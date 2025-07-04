@@ -95,7 +95,7 @@ void htif_t::start()
       reset();
     } else {
       auto empty_symbols = std::map<std::string, uint64_t>();
-      load_symbols(empty_symbols);
+      load_symbols(empty_symbols); //M:: read symbols from empty ELF file
     }
   }
 }
@@ -257,7 +257,7 @@ void htif_t::clear_chunk(addr_t taddr, size_t len)
     write_chunk(taddr + pos, std::min(len - pos, chunk_max_size()), &zeros[0]);
 }
 
-int htif_t::run()
+int htif_t::run() //M:: Run the HTIF main loop
 {
   start();
 
@@ -268,7 +268,7 @@ int htif_t::run()
 
   if (tohost_addr == 0) {
     while (!should_exit())
-      idle();
+      idle(); //M:: important point
   }
 
   while (!should_exit())

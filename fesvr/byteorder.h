@@ -25,7 +25,7 @@ static inline int128_t swap(int128_t n) { return int128_t(swap(uint128_t(n))); }
 static inline bool is_be() { return htonl(1) == 1; }
 template<typename T> static inline T from_be(T n) { return is_be() ? n : swap(n); }
 template<typename T> static inline T to_be(T n) { return from_be(n); }
-template<typename T> static inline T from_le(T n) { return is_be() ? swap(n) : n; }
+template<typename T> static inline T from_le(T n) { return is_be() ? swap(n) : n; } //M:: from_le is the same as swap if target is big-endian
 template<typename T> static inline T to_le(T n) { return from_le(n); }
 
 // Wrapper to mark a value as target endian, to guide conversion code
