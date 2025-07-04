@@ -108,7 +108,7 @@ static std::ifstream::pos_type get_file_size(const char *filename)
 }
 
 static void read_file_bytes(const char *filename,size_t fileoff,
-                            abstract_mem_t* mem, size_t memoff, size_t read_sz)
+                            abstract_mem_t* mem, size_t memoff, size_t read_sz) //M:: this is where the input file being written in memory
 {
   std::ifstream in(filename, std::ios::in | std::ios::binary);
   in.seekg(fileoff, std::ios::beg);
@@ -475,7 +475,7 @@ int main(int argc, char** argv)
       kernel_offset = 0x400000;
     for (auto& m : mems) {
       if (kernel_size && (kernel_offset + kernel_size) < m.second->size()) {
-         read_file_bytes(kernel, 0, m.second, kernel_offset, kernel_size);
+         read_file_bytes(kernel, 0, m.second, kernel_offset, kernel_size); //M:: read input file
          break;
       }
     }
@@ -548,7 +548,7 @@ int main(int argc, char** argv)
   s.configure_log(log, log_commits);
   s.set_histogram(histogram);
 
-  auto return_code = s.run();
+  auto return_code = s.run(); //M:: running point
 
   for (auto& mem : mems)
     delete mem.second;

@@ -62,7 +62,7 @@ processor_t::processor_t(const char* isa_str, const char* priv_str,
   VU.vlenb = isa.get_vlen() / 8;
   VU.vstart_alu = 0;
 
-  register_base_instructions();
+  register_base_instructions(); //M::
   mmu = new mmu_t(sim, cfg->endianness, this, cfg->cache_blocksz);
 
   disassembler = new disassembler_t(&isa);
@@ -673,7 +673,7 @@ reg_t illegal_instruction(processor_t UNUSED *p, insn_t insn, reg_t UNUSED pc)
   throw trap_illegal_instruction(insn.bits() & 0xffffffffULL);
 }
 
-insn_func_t processor_t::decode_insn(insn_t insn)
+insn_func_t processor_t::decode_insn(insn_t insn) //M:: decodeing here
 {
   // look up opcode in hash table
   size_t idx = insn.bits() % OPCODE_CACHE_SIZE;
@@ -729,7 +729,7 @@ void processor_t::register_extension(extension_t *x) {
   }
 }
 
-void processor_t::register_base_instructions()
+void processor_t::register_base_instructions() //M:: 
 {
   #define DECLARE_INSN(name, match, mask) \
     insn_bits_t name##_match = (match), name##_mask = (mask); \
@@ -748,7 +748,7 @@ void processor_t::register_base_instructions()
     extern reg_t logged_rv64i_##name(processor_t*, insn_t, reg_t); \
     extern reg_t logged_rv32e_##name(processor_t*, insn_t, reg_t); \
     extern reg_t logged_rv64e_##name(processor_t*, insn_t, reg_t);
-  #include "insn_list.h"
+  #include "insn_list.h" //M:: where is this?:/
   #undef DEFINE_INSN
 
   #define DEFINE_INSN_UNCOND(name) { \

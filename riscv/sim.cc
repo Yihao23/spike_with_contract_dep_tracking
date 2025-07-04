@@ -268,7 +268,7 @@ sim_t::~sim_t()
   delete debug_mmu;
 }
 
-int sim_t::run()
+int sim_t::run() //M:: run is here
 {
   if (!debug && log)
     set_procs_debug(true);
@@ -424,7 +424,7 @@ void sim_t::reset()
     set_rom();
 }
 
-void sim_t::idle()
+void sim_t::idle() //M:: strat using step
 {
   if (done())
     return;
@@ -435,7 +435,7 @@ void sim_t::idle()
     if (instruction_limit.has_value()) {
       if (*instruction_limit < INTERLEAVE) {
         // Final step.
-        step(*instruction_limit);
+        step(*instruction_limit); //M:: using step
         htif_exit(0);
         *instruction_limit = 0;
         return;

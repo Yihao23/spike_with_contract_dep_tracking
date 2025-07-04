@@ -10,7 +10,7 @@
 #include "softfloat_types.h"
 #include "specialize.h"
 
-// helpful macros, etc
+// helpful macros, etc M::
 #define MMU (*p->get_mmu())
 #define STATE (*p->get_state())
 #define FLEN (p->get_flen())
@@ -21,7 +21,7 @@
 #define RS1 READ_REG(insn.rs1())
 #define RS2 READ_REG(insn.rs2())
 #define RS3 READ_REG(insn.rs3())
-#define WRITE_RD(value) WRITE_REG(insn.rd(), value)
+#define WRITE_RD(value) WRITE_REG(insn.rd(), value) //M::
 #define CHECK_RD() CHECK_REG(insn.rd())
 
 /* 0 : int

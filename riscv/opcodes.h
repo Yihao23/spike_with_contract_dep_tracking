@@ -5,6 +5,9 @@
 #define S0      8
 #define S1      9
 
+
+//M:: anything to do with .h files
+
 static uint32_t bits(uint32_t value, unsigned int hi, unsigned int lo) {
   return (value >> lo) & ((1 << (hi+1-lo)) - 1);
 }

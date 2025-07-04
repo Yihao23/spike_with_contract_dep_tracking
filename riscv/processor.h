@@ -68,7 +68,8 @@ typedef std::map<reg_t, freg_t> commit_log_reg_t;
 typedef std::vector<std::tuple<reg_t, uint64_t, uint8_t>> commit_log_mem_t;
 
 // architectural state of a RISC-V hart
-struct state_t
+//M:: probable start point for cnotract log
+struct state_t //M:: maybe a method here for ctr log for desired insts
 {
   void add_ireg_proxy(processor_t* const proc, sscsrind_reg_csr_t::sscsrind_reg_csr_t_p ireg);
   void reset(processor_t* const proc, reg_t max_isa);
@@ -191,6 +192,7 @@ struct state_t
       STEP_STEPPED
   } single_step;
 
+  //M:: use these logs
   commit_log_reg_t log_reg_write;
   commit_log_mem_t log_mem_read;
   commit_log_mem_t log_mem_write;

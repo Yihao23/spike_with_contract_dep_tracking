@@ -22,7 +22,7 @@ static void commit_log_stash_privilege(processor_t* p)
   state->last_inst_flen = p->get_flen();
 }
 
-static void commit_log_print_value(FILE *log_file, int width, const void *data)
+static void commit_log_print_value(FILE *log_file, int width, const void *data) //M:: maybe commit is here
 {
   assert(log_file);
 
@@ -59,7 +59,7 @@ static void commit_log_print_value(FILE *log_file, int width, uint64_t val)
   commit_log_print_value(log_file, width, &val);
 }
 
-static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
+static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn) //M:: maybe commit
 {
   FILE *log_file = p->get_log_file();
 
@@ -161,7 +161,7 @@ inline void processor_t::update_histogram(reg_t pc)
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch) {
   return fetch.func(p, fetch.insn, pc);
 }
-static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch)
+static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch) //M:: execute instruction and update pc
 {
   if (p->get_log_commits_enabled()) {
     commit_log_reset(p);
@@ -207,8 +207,8 @@ bool processor_t::slow_path() const
          log_commits_enabled || histogram_enabled || in_wfi || check_triggers_icount;
 }
 
-// fetch/decode/execute loop
-void processor_t::step(size_t n)
+// M:: fetch/decode/execute loop
+void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc and idle is called inside run in htif.cc
 {
   mmu_t* _mmu = mmu;
 
@@ -245,7 +245,7 @@ void processor_t::step(size_t n)
           case PC_SERIALIZE_AFTER: ++instret; break; \
           default: abort(); \
         } \
-        pc = state.pc; \
+        pc = state.pc; \ //M:: pc is updated by execute_insn_logged
         break; \
       } else { \
         state.pc = pc; \
@@ -290,10 +290,10 @@ void processor_t::step(size_t n)
           }
 
           in_wfi = false;
-          insn_fetch_t fetch = mmu->load_insn(pc);
+          insn_fetch_t fetch = mmu->load_insn(pc); //M:: fetch instruction from I$ and decode it
           if (debug && !state.serialized)
             disasm(fetch.insn);
-          pc = execute_insn_logged(this, pc, fetch);
+          pc = execute_insn_logged(this, pc, fetch); //M:: execute instruction and update pc
           advance_pc();
 
           // Resume from debug mode in critical error
