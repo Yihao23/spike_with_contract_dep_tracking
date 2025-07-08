@@ -19,5 +19,9 @@
 #define NS16550_INTERRUPT_ID 1
 #define EXT_IO_BASE        0x40000000
 #define DRAM_BASE          0x80000000
+#define DEFAULT_CTR        "top"
+
+uint64_t contract = UINT64_C(0x0);
+FILE * leak_out;
 
 #endif
