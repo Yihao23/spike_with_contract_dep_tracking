@@ -85,6 +85,8 @@ static void help(int exit_code = 1)
   fprintf(stderr, "  --dm-no-impebreak     Debug module won't support implicit ebreak in program buffer\n");
   fprintf(stderr, "  --blocksz=<size>      Cache block size (B) for CMO operations(powers of 2) [default 64]\n");
   fprintf(stderr, "  --instructions=<n>    Stop after n instructions\n");
+  fprintf(stderr, "  --ctr=<name>          hardware-software contract (ct/arch/bm/ct-b/top)[default %s]\n", DEFAULT_CTR);
+  fprintf(stderr, "  -o=<name>             contract log file\n");
 
   exit(exit_code);
 }
@@ -314,6 +316,11 @@ static std::vector<size_t> parse_hartids(const char *s)
   return hartids;
 }
 
+void close_logs()
+{
+  fclose(leak_out);
+}
+
 int main(int argc, char** argv)
 {
   bool debug = false;
@@ -457,6 +464,24 @@ int main(int argc, char** argv)
     instructions = strtoull(s, 0, 0);
   });
 
+  parser.option(0, "ctr", 1, [&](const char* s){
+    if (strcmp(s, "ct") == 0) {
+      contract=0;
+    } else if (strcmp(s, "arch") == 0) {
+      contract=1;
+    } else if (strcmp(s, "bm") == 0) {
+      contract=2;
+    } else if (strcmp(s, "ct-b") == 0) {
+      contract=3;
+    } else {
+      contract=4; // default is "top"
+    }
+  });
+
+  parser.option(0, "o", 1, [&](const char* s){
+    leak_out = fopen(s, "w");
+  });
+
   auto argv1 = parser.parse(argv);
   std::vector<std::string> htif_args(argv1, (const char*const*)argv + argc);
 
@@ -549,6 +574,8 @@ int main(int argc, char** argv)
   s.set_histogram(histogram);
 
   auto return_code = s.run(); //M:: running point
+
+  close_logs();
 
   for (auto& mem : mems)
     delete mem.second;
