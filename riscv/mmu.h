@@ -35,10 +35,10 @@ const reg_t PGSIZE = 1 << PGSHIFT;
 #define MMU_OBSERVE_STORE(addr, data, length)
 #endif
 
-struct insn_fetch_t
+struct insn_fetch_t //M:: inst DS
 {
   insn_func_t func;
-  insn_t insn;
+  insn_t insn; //M:: using its methods we can get instruction fields
 };
 
 struct icache_entry_t {

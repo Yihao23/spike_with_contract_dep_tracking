@@ -10,7 +10,7 @@
 #include "softfloat_types.h"
 #include "specialize.h"
 
-// helpful macros, etc M::
+// helpful macros, etc M:: use in inst.h and referred to methods in class insn_t
 #define MMU (*p->get_mmu())
 #define STATE (*p->get_state())
 #define FLEN (p->get_flen())
