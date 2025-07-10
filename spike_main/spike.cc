@@ -466,15 +466,15 @@ int main(int argc, char** argv)
 
   parser.option(0, "ctr", 1, [&](const char* s){
     if (strcmp(s, "ct") == 0) {
-      contract=0;
+      contract = SEQ_CT;
     } else if (strcmp(s, "arch") == 0) {
-      contract=1;
+      contract = SEQ_ARCH;
     } else if (strcmp(s, "bm") == 0) {
-      contract=2;
+      contract = SEQ_BM;
     } else if (strcmp(s, "ct-b") == 0) {
-      contract=3;
+      contract = SEQ_CT_B;
     } else {
-      contract=4; // default is "top"
+      contract = TOP; // default is "top"
     }
   });
 
