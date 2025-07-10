@@ -6,7 +6,8 @@
 #include "disasm.h"
 #include "decode_macros.h"
 #include <cassert>
-#include <leakage.h>
+#include "leakage.h"
+#include "platform.h"
 
 static void commit_log_reset(processor_t* p)
 {
@@ -211,14 +212,12 @@ bool processor_t::slow_path() const
          log_commits_enabled || histogram_enabled || in_wfi || check_triggers_icount;
 }
 
-struct Leakage leakage; //M:: leakage object
+
 
 // M:: fetch/decode/execute loop
 void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc and idle is called inside run in htif.cc
 {
-  delete_all_leaks(&leakage);
-  init_leaks(&leakage);
-
+  struct Leakage leakage;
   mmu_t* _mmu = mmu;
 
   if (!state.debug_mode) {
@@ -242,6 +241,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
   }
 
   while (n > 0) {
+
     size_t instret = 0;
     reg_t pc = state.pc;
     state.prv_changed = false;
@@ -272,6 +272,9 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         // Main simulation loop, slow path.
         while (instret < n)
         {
+         
+          delete_all_leaks(&leakage);
+          init_leaks(&leakage);
           if (unlikely(!state.serialized && state.single_step == state.STEP_STEPPED)) {
             state.single_step = state.STEP_NONE;
             if (!state.debug_mode) {
@@ -315,11 +318,14 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
               enter_debug_mode(DCSR_CAUSE_HALT, 0);
             }
           }
+          print_leaks(leak_out,&leakage);
         }
       }
       else while (instret < n)
       {
         // Main simulation loop, fast path.
+        delete_all_leaks(&leakage);
+        init_leaks(&leakage);
         for (auto ic_entry = _mmu->access_icache(pc); ; ) {
           auto fetch = ic_entry->data;
           pc = execute_insn_fast(this, pc, fetch); //M:: inside this
@@ -333,6 +339,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         }
 
         advance_pc();
+        print_leaks(leak_out, &leakage);
       }
     }
     catch(trap_t& t)

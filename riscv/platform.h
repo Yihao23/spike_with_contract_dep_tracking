@@ -24,12 +24,11 @@
 uint64_t contract = UINT64_C(0x0);
 FILE * leak_out;
 
-enum hw_sw_contract = {
-    SEQ_CT,
-    SEQ_ARCH,
-    SEQ_BM,
-    SEQ_CT_B,
-    TOP
-};
+#define SEQ_CT 0
+#define SEQ_ARCH 1
+#define SEQ_BM 2
+#define SEQ_CT_B 3
+#define TOP 4
+
 
 #endif
