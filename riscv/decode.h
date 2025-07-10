@@ -72,7 +72,7 @@ const int NCSR = 4096;
 #define Sn(n) ((n) < 2 ? X_S0 + (n) : X_Sn + (n))
 
 typedef uint64_t insn_bits_t;
-class insn_t //M::
+class insn_t //M:: in relation with decode_macros.h and insn_template.cc
 {
 public:
   insn_t() = default;

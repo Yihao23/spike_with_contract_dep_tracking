@@ -6,6 +6,7 @@
 #include "disasm.h"
 #include "decode_macros.h"
 #include <cassert>
+#include <leakage.h>
 
 static void commit_log_reset(processor_t* p)
 {
@@ -159,6 +160,7 @@ inline void processor_t::update_histogram(reg_t pc)
 // These two functions are expected to be inlined by the compiler separately in
 // the processor_t::step() loop. The logged variant is used in the slow path
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch) {
+  add_leakage(&leakage, npc, fetch.insn, fetch.func);
   return fetch.func(p, fetch.insn, pc);
 }
 static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch) //M:: execute instruction and update pc
@@ -198,6 +200,8 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
   }
   p->update_histogram(pc);
 
+  add_leakage(&leakage, npc, fetch.insn, fetch.func);
+
   return npc;
 }
 
@@ -207,9 +211,14 @@ bool processor_t::slow_path() const
          log_commits_enabled || histogram_enabled || in_wfi || check_triggers_icount;
 }
 
+struct Leakage leakage; //M:: leakage object
+
 // M:: fetch/decode/execute loop
 void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc and idle is called inside run in htif.cc
 {
+  delete_all_leaks(&leakage);
+  init_leaks(&leakage);
+
   mmu_t* _mmu = mmu;
 
   if (!state.debug_mode) {
@@ -293,7 +302,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
           insn_fetch_t fetch = mmu->load_insn(pc); //M:: fetch instruction from I$ and decode it
           if (debug && !state.serialized)
             disasm(fetch.insn);
-          pc = execute_insn_logged(this, pc, fetch); //M:: execute instruction and update pc
+          pc = execute_insn_logged(this, pc, fetch); //M:: inside this
           advance_pc();
 
           // Resume from debug mode in critical error
@@ -313,7 +322,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         // Main simulation loop, fast path.
         for (auto ic_entry = _mmu->access_icache(pc); ; ) {
           auto fetch = ic_entry->data;
-          pc = execute_insn_fast(this, pc, fetch);
+          pc = execute_insn_fast(this, pc, fetch); //M:: inside this
           ic_entry = ic_entry->next;
           if (unlikely(ic_entry->tag != pc))
             break;

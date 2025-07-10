@@ -1,4 +1,5 @@
 // See LICENSE for license details.
+//M:: where each inst functionality is accessed.
 
 #include "insn_template.h"
 #include "insn_macros.h"
