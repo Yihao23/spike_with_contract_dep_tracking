@@ -158,10 +158,11 @@ inline void processor_t::update_histogram(reg_t pc)
     pc_histogram[pc]++;
 }
 
+struct Leakage leakage;
 // These two functions are expected to be inlined by the compiler separately in
 // the processor_t::step() loop. The logged variant is used in the slow path
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch) {
-  add_leakage(&leakage, npc, fetch.insn, fetch.func);
+  add_leakage(&leakage, pc, fetch.insn, fetch.func);
   return fetch.func(p, fetch.insn, pc);
 }
 static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch) //M:: execute instruction and update pc
@@ -217,7 +218,6 @@ bool processor_t::slow_path() const
 // M:: fetch/decode/execute loop
 void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc and idle is called inside run in htif.cc
 {
-  struct Leakage leakage;
   mmu_t* _mmu = mmu;
 
   if (!state.debug_mode) {
@@ -246,7 +246,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
     reg_t pc = state.pc;
     state.prv_changed = false;
     state.v_changed = false;
-
+    //M:: pc is updated by execute_insn_logged
     #define advance_pc() \
       if (unlikely(invalid_pc(pc))) { \
         switch (pc) { \
@@ -254,7 +254,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
           case PC_SERIALIZE_AFTER: ++instret; break; \
           default: abort(); \
         } \
-        pc = state.pc; \ //M:: pc is updated by execute_insn_logged
+        pc = state.pc; \
         break; \
       } else { \
         state.pc = pc; \

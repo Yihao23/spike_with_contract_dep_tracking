@@ -1,4 +1,5 @@
 // See LICENSE for license details.
+#include <stdio.h>
 #ifndef _RISCV_PLATFORM_H
 #define _RISCV_PLATFORM_H
 
@@ -21,8 +22,8 @@
 #define DRAM_BASE          0x80000000
 #define DEFAULT_CTR        "top"
 
-uint64_t contract = UINT64_C(0x0);
-FILE * leak_out;
+extern uint64_t contract = UINT64_C(0x0);
+extern FILE * leak_out;
 
 #define SEQ_CT 0
 #define SEQ_ARCH 1
