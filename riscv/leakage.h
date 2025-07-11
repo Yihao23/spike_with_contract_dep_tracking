@@ -19,7 +19,7 @@ struct Leakage {
 
 void add_leak(struct Leakage *f, const char *location, u_int64_t value)
 {
-   struct Leak *l = malloc(sizeof *l);
+   struct Leak *l = (struct Leak*)malloc(sizeof *l);
    strcpy(l->loc,location); 
    l->leak = value;
    SLIST_INSERT_HEAD(&f->head, l, leaks);
@@ -53,6 +53,8 @@ void init_leaks(struct Leakage *f)
 {
   SLIST_INIT(&f->head);
 }
+
+void add_leakage(struct Leakage *l, reg_t npc, insn_t insn, insn_func_t func);
 
 /* 
 int main(void)
