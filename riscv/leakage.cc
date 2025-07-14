@@ -1,11 +1,12 @@
 #include "leakage.h"
 #include "config.h"
-#include "processor.h"
+// #include "processor.h"
 #include "mmu.h"
 #include "disasm.h"
 #include "decode_macros.h"
 #include <cassert>
 #include "platform.h"
+// #include "decode.h"
 
 
 
@@ -61,5 +62,42 @@ void add_leakage(struct Leakage *l, reg_t npc, insn_t insn, insn_func_t func)
         add_leak(l,"rs2", insn.rs2());
     }
 
+}
+
+void add_leak(struct Leakage *f, const char *location, u_int64_t value)
+{
+   struct Leak *l = (struct Leak*)malloc(sizeof *l);
+   strcpy(l->loc,location); 
+   l->leak = value;
+   SLIST_INSERT_HEAD(&f->head, l, leaks);
+}
+
+void print_leaks(FILE *dest, struct Leakage *f)
+{
+    struct Leak *l;
+    fprintf(dest, "Leakage:\n");
+    SLIST_FOREACH(l, &f->head, leaks) {
+        fprintf(dest, "Leak: %s 0x%lx\n", l->loc, l->leak);
+    }
+}
+void delete_leak(struct Leakage *f)
+{
+    struct Leak *b = SLIST_FIRST(&f->head);
+    SLIST_REMOVE_HEAD(&f->head, leaks);
+    free(b);
+}
+
+void delete_all_leaks(struct Leakage *f)
+{
+    struct Leak *b;
+    while((b = SLIST_FIRST(&f->head))) {
+        SLIST_REMOVE_HEAD(&f->head, leaks);
+        free(b);
+    }
+}
+
+void init_leaks(struct Leakage *f)
+{
+  SLIST_INIT(&f->head);
 }
 

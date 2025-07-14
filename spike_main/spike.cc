@@ -20,7 +20,11 @@
 #include <limits>
 #include <cinttypes>
 #include <sstream>
+#include "platform.h"
 #include "../VERSION"
+
+uint64_t contract = TOP;
+FILE *leak_out = nullptr;
 
 static void help(int exit_code = 1)
 {

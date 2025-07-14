@@ -51,6 +51,7 @@ riscv_precompiled_hdrs = \
 riscv_srcs = \
 	processor.cc \
 	execute.cc \
+	leakage.cc \
 	dts.cc \
 	sim.cc \
 	interactive.cc \

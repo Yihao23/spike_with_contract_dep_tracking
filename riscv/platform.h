@@ -22,7 +22,7 @@
 #define DRAM_BASE          0x80000000
 #define DEFAULT_CTR        "top"
 
-extern uint64_t contract = UINT64_C(0x0);
+extern uint64_t contract;
 extern FILE * leak_out;
 
 #define SEQ_CT 0
