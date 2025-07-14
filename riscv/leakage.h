@@ -1,7 +1,12 @@
+
+#ifndef _RISCV_LEAKAGE_H
+#define _RISCV_LEAKAGE_H
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/queue.h>
+#include "decode.h"
+#include "processor.h"
 
 // modified from https://stackoverflow.com/a/16819977
 
@@ -12,49 +17,26 @@ struct Leak {
     SLIST_ENTRY(Leak) leaks;
 };
 struct Leakage {
-   //list of leaks in the "leakage"
-   SLIST_HEAD(,Leak) head; 
+    //list of leaks in the "leakage"
+    SLIST_HEAD(,Leak) head; 
 };
 
-
-void add_leak(struct Leakage *f, const char *location, u_int64_t value)
-{
-   struct Leak *l = (struct Leak*)malloc(sizeof *l);
-   strcpy(l->loc,location); 
-   l->leak = value;
-   SLIST_INSERT_HEAD(&f->head, l, leaks);
-}
-
-void print_leaks(FILE *dest, struct Leakage *f)
-{
-    struct Leak *l;
-    fprintf(dest, "Leakage:\n");
-    SLIST_FOREACH(l, &f->head, leaks) {
-        fprintf(dest, "Leak: %s 0x%lx\n", l->loc, l->leak);
-    }
-}
-void delete_leak(struct Leakage *f)
-{
-    struct Leak *b = SLIST_FIRST(&f->head);
-    SLIST_REMOVE_HEAD(&f->head, leaks);
-    free(b);
-}
-
-void delete_all_leaks(struct Leakage *f)
-{
-    struct Leak *b;
-    while((b = SLIST_FIRST(&f->head))) {
-        SLIST_REMOVE_HEAD(&f->head, leaks);
-        free(b);
-    }
-}
-
-void init_leaks(struct Leakage *f)
-{
-  SLIST_INIT(&f->head);
-}
-
 void add_leakage(struct Leakage *l, reg_t npc, insn_t insn, insn_func_t func);
+
+void add_leak(struct Leakage *f, const char *location, u_int64_t value);
+
+
+void print_leaks(FILE *dest, struct Leakage *f);
+
+void delete_leak(struct Leakage *f);
+
+
+void delete_all_leaks(struct Leakage *f);
+
+
+void init_leaks(struct Leakage *f);
+
+
 
 /* 
 int main(void)
@@ -87,3 +69,5 @@ int main(void)
     return 0;
 }
  */
+
+ #endif
