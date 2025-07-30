@@ -309,7 +309,7 @@ public:
     return target_big_endian ? to_be(res) : res;
   }
 
-  inline icache_entry_t* refill_icache(reg_t addr, icache_entry_t* entry) //M:: Fetching
+  inline icache_entry_t* refill_icache(reg_t addr, icache_entry_t* entry) //M:: Fetching excp
   {
     insn_bits_t insn = fetch_insn_parcel(addr);
 
@@ -374,22 +374,6 @@ public:
 
   void flush_tlb();
   void flush_icache();
-
-  void register_memtracer(memtracer_t*);
-
-  int is_misaligned_enabled()
-  {
-    return proc && proc->get_cfg().misaligned;
-  }
-
-  bool is_target_big_endian()
-  {
-    return target_big_endian;
-  }
-
-  template<typename T> inline T from_target(target_endian<T> n) const
-  {
-    return target_big_endian? n.from_be() : n.from_le();
   }
 
   template<typename T> inline target_endian<T> to_target(T n) const
@@ -497,7 +481,7 @@ private:
     }
   }
 
-  inline insn_parcel_t fetch_insn_parcel(reg_t addr) { //M:: Fetch
+  inline insn_parcel_t fetch_insn_parcel(reg_t addr) { //M:: Fetch excp
     if (auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_insn, addr); tlb_hit)
       return from_le(*(insn_parcel_t*)host_addr);
 
