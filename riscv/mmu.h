@@ -374,6 +374,22 @@ public:
 
   void flush_tlb();
   void flush_icache();
+  
+  void register_memtracer(memtracer_t*);
+
+  int is_misaligned_enabled()
+  {
+    return proc && proc->get_cfg().misaligned;
+  }
+
+  bool is_target_big_endian()
+  {
+    return target_big_endian;
+  }
+
+  template<typename T> inline T from_target(target_endian<T> n) const
+  {
+    return target_big_endian? n.from_be() : n.from_le();
   }
 
   template<typename T> inline target_endian<T> to_target(T n) const
