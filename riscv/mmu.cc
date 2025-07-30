@@ -44,6 +44,9 @@ void mmu_t::flush_tlb()
 
 void throw_access_exception(bool virt, reg_t addr, access_type type)
 {
+  std::cerr << "Exception with cause " << type << std::endl;
+  std::exit(1);
+
   switch (type) {
     case FETCH: throw trap_instruction_access_fault(virt, addr, 0, 0);
     case LOAD: throw trap_load_access_fault(virt, addr, 0, 0);
@@ -64,7 +67,7 @@ reg_t mmu_t::translate(mem_access_info_t access_info, reg_t len)
 
   reg_t paddr = walk(access_info) | (addr & (PGSIZE-1));
   if (!pmp_ok(paddr, len, access_info.flags.ss_access ? STORE : type, mode, access_info.flags.hlvx))
-    throw_access_exception(virt, addr, access_info.flags.ss_access ? STORE : type);
+    throw_access_exception(virt, addr, access_info.flags.ss_access ? STORE : type); //M:: excp
   return paddr;
 }
 
@@ -98,7 +101,7 @@ mmu_t::insn_parcel_t mmu_t::fetch_slow_path(reg_t vaddr)
   check_triggers(triggers::OPERATION_EXECUTE, vaddr, access_info.effective_virt);
 
   if (!tlb_hit) {
-    paddr = translate(access_info, sizeof(insn_parcel_t));
+    paddr = translate(access_info, sizeof(insn_parcel_t)); //M:: excp
     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
 
     refill_tlb(vaddr, paddr, (char*)host_addr, FETCH);
@@ -230,7 +233,7 @@ void mmu_t::load_slow_path_intrapage(reg_t len, uint8_t* bytes, mem_access_info_
   reg_t vaddr = access_info.vaddr;
   auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_load, vaddr, TLB_FLAGS);
   if (!tlb_hit || access_info.flags.is_special_access()) {
-    paddr = translate(access_info, len);
+    paddr = translate(access_info, len); //M:: excp
     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
 
     if (!access_info.flags.is_special_access())
@@ -312,7 +315,7 @@ void mmu_t::store_slow_path_intrapage(reg_t len, const uint8_t* bytes, mem_acces
   reg_t vaddr = access_info.vaddr;
   auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_store, vaddr, TLB_FLAGS);
   if (!tlb_hit || access_info.flags.is_special_access()) {
-    paddr = translate(access_info, len);
+    paddr = translate(access_info, len); //M:: excp
     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
 
     if (!access_info.flags.is_special_access())

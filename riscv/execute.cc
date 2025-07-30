@@ -186,8 +186,10 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
         commit_log_print_insn(p, pc, fetch.insn);
       }
       throw;
-  } catch(mem_trap_t& t) {
+  } catch(mem_trap_t& t) { //M:: excp
       //handle segfault in midlle of vector load/store
+      std::cerr << "Memory trap exception " << std::endl;
+      std::exit(1);
       if (p->get_log_commits_enabled()) {
         for (auto item : p->get_state()->log_reg_write) {
           if ((item.first & 3) == 3) {
@@ -342,7 +344,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         print_leaks(leak_out, &leakage);
       }
     }
-    catch(trap_t& t)
+    catch(trap_t& t) //M:: excp
     {
       take_trap(t, pc);
       n = instret;
