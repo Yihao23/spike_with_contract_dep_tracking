@@ -188,8 +188,8 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
       throw;
   } catch(mem_trap_t& t) { //M:: excp
       //handle segfault in midlle of vector load/store
-      std::cerr << "Memory trap exception " << std::endl;
-      std::exit(1);
+      std::cerr << "Memory trap exception\n";
+      exit(1);
       if (p->get_log_commits_enabled()) {
         for (auto item : p->get_state()->log_reg_write) {
           if ((item.first & 3) == 3) {
