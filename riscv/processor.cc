@@ -415,8 +415,8 @@ void processor_t::debug_output_log(std::stringstream *s)
 
 void processor_t::take_trap(trap_t& t, reg_t epc)
 {
-  std::cerr << "Exception: entring trap handler\n";
-  exit(1);
+  // std::cerr << "Exception: entring trap handler\n";
+  // exit(-1);
   unsigned max_xlen = isa.get_max_xlen();
 
   if (debug) {

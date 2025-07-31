@@ -45,7 +45,7 @@ void mmu_t::flush_tlb()
 void throw_access_exception(bool virt, reg_t addr, access_type type)
 {
   std::cerr << "Exception with cause\n";
-  exit(1);
+  exit(-1);
 
   switch (type) {
     case FETCH: throw trap_instruction_access_fault(virt, addr, 0, 0);
