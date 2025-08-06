@@ -433,8 +433,8 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
 
   if (state.debug_mode) {
     if (t.cause() == CAUSE_BREAKPOINT) {
-      std::cerr << "Exception breakpoint\n";
-      exit(-1);
+      // std::cerr << "Exception breakpoint\n";
+      // exit(-1);
       state.pc = DEBUG_ROM_ENTRY;
     } else {
       state.pc = DEBUG_ROM_TVEC;
@@ -574,8 +574,8 @@ void processor_t::take_trigger_action(triggers::action_t action, reg_t breakpoin
       enter_debug_mode(DCSR_CAUSE_HWBP, 0);
       break;
     case triggers::ACTION_DEBUG_EXCEPTION: {
-      std::cerr << "Exception breakpoint\n";
-      exit(-1);
+      // std::cerr << "Exception breakpoint\n";
+      // exit(-1);
       trap_breakpoint trap(virt, breakpoint_tval);
       take_trap(trap, epc);
       break;

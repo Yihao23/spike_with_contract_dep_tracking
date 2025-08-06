@@ -230,8 +230,8 @@ public:
     if (unlikely(addr & (sizeof(float128_t)-1)) && !is_misaligned_enabled()) {
       std::cerr << "Exception trap_store_address_misaligned\n";
       exit(-1);
-    }
       throw trap_store_address_misaligned((proc) ? proc->state.v : false, addr, 0, 0);
+    }
 
     store<uint64_t>(addr, val.v[0]);
     store<uint64_t>(addr + 8, val.v[1]);

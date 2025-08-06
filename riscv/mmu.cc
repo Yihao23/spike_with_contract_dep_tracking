@@ -80,8 +80,8 @@ inline mmu_t::insn_parcel_t mmu_t::perform_intrapage_fetch(reg_t vaddr, uintptr_
   else if (!mmio_fetch(paddr, sizeof(res), (uint8_t*)&res)){
     std::cerr << "Exception trap_instruction_access_fault\n";
     exit(-1);
-  }
     throw trap_instruction_access_fault(proc->state.v, vaddr, 0, 0);
+  }
 
   return res;
 }
@@ -371,14 +371,14 @@ void mmu_t::store_slow_path(reg_t original_addr, reg_t len, const uint8_t* bytes
     if (!is_misaligned_enabled()){
       std::cerr << "Exception trap_store_address_misaligned\n";
       exit(-1);
-    }
       throw trap_store_address_misaligned(gva, transformed_addr, 0, 0);
+    }
 
     if (require_alignment){
       std::cerr << "Exception trap_store_address_misaligned\n";
       exit(-1);
-    }
       throw trap_store_access_fault(gva, transformed_addr, 0, 0);
+    }
 
     reg_t len_page0 = std::min(len, PGSIZE - transformed_addr % PGSIZE);
     store_slow_path_intrapage(len_page0, bytes, access_info, actually_store);
