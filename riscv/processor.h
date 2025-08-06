@@ -332,8 +332,11 @@ public:
     return ~(reg_t)(ialign == 16 ? 0 : 2);
   }
   void check_pc_alignment(reg_t pc) {
-    if (unlikely(pc & ~pc_alignment_mask()))
-      throw trap_instruction_address_misaligned(state.v, pc, 0, 0);
+    if (unlikely(pc & ~pc_alignment_mask())){
+      std::cerr << "Exception trap_instruction_address_misaligned\n";
+      exit(-1);
+    }
+      // throw trap_instruction_address_misaligned(state.v, pc, 0, 0);
   }
   reg_t legalize_privilege(reg_t);
   void set_privilege(reg_t, bool);
