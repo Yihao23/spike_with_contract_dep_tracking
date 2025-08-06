@@ -100,18 +100,18 @@ class mem_trap_t : public trap_t
   std::string name() { return "trap_"#x; } \
 };
 
-DECLARE_MEM_TRAP(CAUSE_MISALIGNED_FETCH, instruction_address_misaligned)
-DECLARE_MEM_TRAP(CAUSE_FETCH_ACCESS, instruction_access_fault)
-DECLARE_INST_TRAP(CAUSE_ILLEGAL_INSTRUCTION, illegal_instruction)
-DECLARE_INST_WITH_GVA_TRAP(CAUSE_BREAKPOINT, breakpoint)
-DECLARE_MEM_TRAP(CAUSE_MISALIGNED_LOAD, load_address_misaligned)
-DECLARE_MEM_TRAP(CAUSE_MISALIGNED_STORE, store_address_misaligned)
-DECLARE_MEM_TRAP(CAUSE_LOAD_ACCESS, load_access_fault)
-DECLARE_MEM_TRAP(CAUSE_STORE_ACCESS, store_access_fault)
-DECLARE_TRAP(CAUSE_USER_ECALL, user_ecall)
-DECLARE_TRAP(CAUSE_SUPERVISOR_ECALL, supervisor_ecall)
-DECLARE_TRAP(CAUSE_VIRTUAL_SUPERVISOR_ECALL, virtual_supervisor_ecall)
-DECLARE_TRAP(CAUSE_MACHINE_ECALL, machine_ecall)
+DECLARE_MEM_TRAP(CAUSE_MISALIGNED_FETCH, instruction_address_misaligned) 
+DECLARE_MEM_TRAP(CAUSE_FETCH_ACCESS, instruction_access_fault) 
+DECLARE_INST_TRAP(CAUSE_ILLEGAL_INSTRUCTION, illegal_instruction) 
+DECLARE_INST_WITH_GVA_TRAP(CAUSE_BREAKPOINT, breakpoint) // M:: not to be terminated exc 
+DECLARE_MEM_TRAP(CAUSE_MISALIGNED_LOAD, load_address_misaligned) 
+DECLARE_MEM_TRAP(CAUSE_MISALIGNED_STORE, store_address_misaligned) 
+DECLARE_MEM_TRAP(CAUSE_LOAD_ACCESS, load_access_fault) 
+DECLARE_MEM_TRAP(CAUSE_STORE_ACCESS, store_access_fault) 
+DECLARE_TRAP(CAUSE_USER_ECALL, user_ecall) // M:: not to be terminated exc
+DECLARE_TRAP(CAUSE_SUPERVISOR_ECALL, supervisor_ecall) // M:: not to be terminated exc
+DECLARE_TRAP(CAUSE_VIRTUAL_SUPERVISOR_ECALL, virtual_supervisor_ecall) // M:: not to be terminated exc
+DECLARE_TRAP(CAUSE_MACHINE_ECALL, machine_ecall) // M:: not to be terminated exc
 DECLARE_MEM_TRAP(CAUSE_FETCH_PAGE_FAULT, instruction_page_fault)
 DECLARE_MEM_TRAP(CAUSE_LOAD_PAGE_FAULT, load_page_fault)
 DECLARE_MEM_TRAP(CAUSE_STORE_PAGE_FAULT, store_page_fault)
@@ -120,6 +120,6 @@ DECLARE_MEM_GVA_TRAP(CAUSE_FETCH_GUEST_PAGE_FAULT, instruction_guest_page_fault)
 DECLARE_MEM_GVA_TRAP(CAUSE_LOAD_GUEST_PAGE_FAULT, load_guest_page_fault)
 DECLARE_INST_TRAP(CAUSE_VIRTUAL_INSTRUCTION, virtual_instruction)
 DECLARE_MEM_GVA_TRAP(CAUSE_STORE_GUEST_PAGE_FAULT, store_guest_page_fault)
-DECLARE_INST_TRAP(CAUSE_SOFTWARE_CHECK_FAULT, software_check)
+DECLARE_INST_TRAP(CAUSE_SOFTWARE_CHECK_FAULT, software_check)  // M:: not to be terminated exc
 
 #endif
