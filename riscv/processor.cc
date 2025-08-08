@@ -415,8 +415,32 @@ void processor_t::debug_output_log(std::stringstream *s)
 
 void processor_t::take_trap(trap_t& t, reg_t epc)
 {
-  // std::cerr << "Exception: entring trap handler\n";
-  // exit(-1);
+  auto cause = t.cause();
+  auto nm = t.name();    
+  auto tv  = t.get_tval();
+
+  std::cout << "code: "<< cause << "\n";
+
+  if  (cause == CAUSE_MISALIGNED_FETCH ||
+       cause == CAUSE_FETCH_ACCESS || cause == CAUSE_ILLEGAL_INSTRUCTION ||
+       cause == CAUSE_MISALIGNED_LOAD ||
+       cause == CAUSE_LOAD_ACCESS || cause == CAUSE_MISALIGNED_STORE ||
+       cause == CAUSE_STORE_ACCESS || cause == CAUSE_FETCH_PAGE_FAULT ||
+       cause == CAUSE_LOAD_PAGE_FAULT || cause == CAUSE_STORE_PAGE_FAULT ||
+       cause == CAUSE_DOUBLE_TRAP || cause == CAUSE_SOFTWARE_CHECK_FAULT || 
+       cause == CAUSE_FETCH_GUEST_PAGE_FAULT || cause == CAUSE_LOAD_GUEST_PAGE_FAULT ||
+       cause == CAUSE_STORE_GUEST_PAGE_FAULT || cause == CAUSE_VIRTUAL_INSTRUCTION)
+  {
+
+    std::cerr << "Exception " << nm
+    << " cause=0x" << std::hex << cause
+    << " tval=0x" << tv
+    << " at priv " << (int)state.prv
+    << "\n";
+
+    std::exit(-1);
+
+  }
   unsigned max_xlen = isa.get_max_xlen();
 
   if (debug) {
@@ -433,8 +457,6 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
 
   if (state.debug_mode) {
     if (t.cause() == CAUSE_BREAKPOINT) {
-      // std::cerr << "Exception breakpoint\n";
-      // exit(-1);
       state.pc = DEBUG_ROM_ENTRY;
     } else {
       state.pc = DEBUG_ROM_TVEC;
@@ -560,8 +582,6 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
 
 void processor_t::take_trigger_action(triggers::action_t action, reg_t breakpoint_tval, reg_t epc, bool virt)
 {
-  std::cerr << "Exception (trigger)\n";
-  exit(-1);
   if (debug) {
     std::stringstream s; // first put everything in a string, later send it to output
     s << "core " << std::dec << std::setfill(' ') << std::setw(3) << id
@@ -574,8 +594,6 @@ void processor_t::take_trigger_action(triggers::action_t action, reg_t breakpoin
       enter_debug_mode(DCSR_CAUSE_HWBP, 0);
       break;
     case triggers::ACTION_DEBUG_EXCEPTION: {
-      // std::cerr << "Exception breakpoint\n";
-      // exit(-1);
       trap_breakpoint trap(virt, breakpoint_tval);
       take_trap(trap, epc);
       break;
