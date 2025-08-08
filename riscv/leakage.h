@@ -21,7 +21,7 @@ struct Leakage {
     SLIST_HEAD(,Leak) head; 
 };
 
-void add_leakage(struct Leakage *l, reg_t npc, insn_t insn, insn_func_t func);
+void add_leakage(struct Leakage *l, reg_t npc, insn_t insn, insn_func_t func, processor_t *p);
 
 void add_leak(struct Leakage *f, const char *location, u_int64_t value);
 

@@ -162,7 +162,7 @@ struct Leakage leakage;
 // These two functions are expected to be inlined by the compiler separately in
 // the processor_t::step() loop. The logged variant is used in the slow path
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch) {
-  add_leakage(&leakage, pc, fetch.insn, fetch.func);
+  add_leakage(&leakage, pc, fetch.insn, fetch.func, p);
   return fetch.func(p, fetch.insn, pc);
 }
 static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch) //M:: execute instruction and update pc
@@ -204,7 +204,7 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
   }
   p->update_histogram(pc);
 
-  add_leakage(&leakage, npc, fetch.insn, fetch.func);
+  add_leakage(&leakage, npc, fetch.insn, fetch.func, p);
 
   return npc;
 }

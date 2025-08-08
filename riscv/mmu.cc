@@ -44,9 +44,6 @@ void mmu_t::flush_tlb()
 
 void throw_access_exception(bool virt, reg_t addr, access_type type)
 {
-  std::cerr << "Exception with cause\n";
-  exit(-1);
-
   switch (type) {
     case FETCH: throw trap_instruction_access_fault(virt, addr, 0, 0);
     case LOAD: throw trap_load_access_fault(virt, addr, 0, 0);
@@ -78,8 +75,6 @@ inline mmu_t::insn_parcel_t mmu_t::perform_intrapage_fetch(reg_t vaddr, uintptr_
   if (host_addr)
     memcpy(&res, (char*)host_addr, sizeof(res));
   else if (!mmio_fetch(paddr, sizeof(res), (uint8_t*)&res)){
-    std::cerr << "Exception trap_instruction_access_fault\n";
-    exit(-1);
     throw trap_instruction_access_fault(proc->state.v, vaddr, 0, 0);
   }
 
@@ -222,13 +217,9 @@ inline void mmu_t::perform_intrapage_load(reg_t vaddr, uintptr_t host_addr, reg_
   } else if (!mmio_load(paddr, len, bytes)) {
     auto access_info = generate_access_info(vaddr, LOAD, xlate_flags);
     if (access_info.flags.ss_access){
-      std::cerr << "Exception trap_store_access_fault\n";
-      exit(-1);
       throw trap_store_access_fault(access_info.effective_virt, access_info.transformed_vaddr, 0, 0);
     }
     else{
-      std::cerr << "Exception trap_load_access_fault\n";
-      exit(-1);
       throw trap_load_access_fault(access_info.effective_virt, access_info.transformed_vaddr, 0, 0);
     }
   }
@@ -281,11 +272,13 @@ void mmu_t::load_slow_path(reg_t original_addr, reg_t len, uint8_t* bytes, xlate
     load_slow_path_intrapage(len, bytes, access_info);
   } else {
     bool gva = access_info.effective_virt;
-    if (!is_misaligned_enabled())
+    if (!is_misaligned_enabled()){
       throw trap_load_address_misaligned(gva, transformed_addr, 0, 0);
+    }
 
-    if (access_info.flags.lr)
+    if (access_info.flags.lr){
       throw trap_load_access_fault(gva, transformed_addr, 0, 0);
+    }
 
     reg_t len_page0 = std::min(len, PGSIZE - transformed_addr % PGSIZE);
     load_slow_path_intrapage(len_page0, bytes, access_info);
@@ -312,9 +305,6 @@ inline void mmu_t::perform_intrapage_store(reg_t vaddr, uintptr_t host_addr, reg
      memcpy((char*)host_addr, bytes, len);
   } else if (!mmio_store(paddr, len, bytes)) {
     auto access_info = generate_access_info(vaddr, STORE, xlate_flags);
-    std::cerr << "Exception trap_store_access_fault\n";
-    exit(-1);
-    //M:: excp
     throw trap_store_access_fault(access_info.effective_virt, access_info.transformed_vaddr, 0, 0);
   }
 
@@ -369,14 +359,10 @@ void mmu_t::store_slow_path(reg_t original_addr, reg_t len, const uint8_t* bytes
   if (transformed_addr & (len - 1)) {
     bool gva = access_info.effective_virt;
     if (!is_misaligned_enabled()){
-      std::cerr << "Exception trap_store_address_misaligned\n";
-      exit(-1);
       throw trap_store_address_misaligned(gva, transformed_addr, 0, 0);
     }
 
     if (require_alignment){
-      std::cerr << "Exception trap_store_address_misaligned\n";
-      exit(-1);
       throw trap_store_access_fault(gva, transformed_addr, 0, 0);
     }
 
@@ -563,17 +549,11 @@ reg_t mmu_t::s2xlate(reg_t gva, reg_t gpa, access_type type, access_type trap_ty
   }
 
   switch (trap_type) {
-    case FETCH:
-      std::cerr << "Exception trap_instruction_guest_page_fault\n";
-      exit(-1);    
+    case FETCH:   
       throw trap_instruction_guest_page_fault(gva, gpa >> 2, tinst);
     case LOAD: 
-      std::cerr << "Exception trap_load_guest_page_fault\n";
-      exit(-1);
       throw trap_load_guest_page_fault(gva, gpa >> 2, tinst);
     case STORE:
-      std::cerr << "Exception trap_store_guest_page_fault\n";
-      exit(-1);
       throw trap_store_guest_page_fault(gva, gpa >> 2, tinst);
     default: abort();
   }
@@ -594,8 +574,6 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
 
   if (ss_access) {
     if (vm.levels == 0){
-      std::cerr << "Exception trap_store_access_fault\n";
-      exit(-1);
       throw trap_store_access_fault(virt, addr, 0, 0);
     }
     type = STORE;
@@ -656,18 +634,12 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
       break;
     } else if (ss_page && ((type == STORE && !ss_access) || access_info.flags.clean_inval)) {
       // non-shadow-stack store or CBO with xwr = 010 causes access-fault
-      std::cerr << "Exception trap_store_access_fault\n";
-      exit(-1);
       throw trap_store_access_fault(virt, addr, 0, 0);
     } else if (ss_page && type == FETCH) {
       // fetch from shadow stack pages cause instruction access-fault
-      std::cerr << "Exception trap_instruction_access_fault\n";
-      exit(-1);
       throw trap_instruction_access_fault(virt, addr, 0, 0);
     } else if ((((pte & PTE_R) && (pte & PTE_W)) || (pte & PTE_X)) && ss_access) {
       // shadow stack access cause store access fault if xwr!=010 and xwr!=001
-      std::cerr << "Exception trap_store_access_fault\n";
-      exit(-1);
       throw trap_store_access_fault(virt, addr, 0, 0);
     } else if (type == FETCH || hlvx ? !(pte & PTE_X) :
                type == LOAD          ? !(sse && ss_page) && !(pte & PTE_R) && !(mxr && (pte & PTE_X)) :
@@ -702,16 +674,10 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
 
   switch (type) {
     case FETCH:
-      std::cerr << "Exception trap_instruction_page_fault\n";
-      exit(-1);
       throw trap_instruction_page_fault(virt, addr, 0, 0);
     case LOAD: 
-      std::cerr << "Exception trap_load_page_fault\n";
-      exit(-1);
       throw trap_load_page_fault(virt, addr, 0, 0);
     case STORE:
-      std::cerr << "Exception trap_store_page_fault\n";
-      exit(-1);
       throw trap_store_page_fault(virt, addr, 0, 0);
     default: abort();
   }

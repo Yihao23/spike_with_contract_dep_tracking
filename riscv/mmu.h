@@ -128,9 +128,6 @@ public:
   template<typename T>
   T ss_load(reg_t addr) {
     if ((addr & (sizeof(T) - 1)) != 0){
-      std::cerr << "Exception trap_store_access_fault\n";
-      exit(-1);
-      //M:: excp
       throw trap_store_access_fault((proc) ? proc->state.v : false, addr, 0, 0);
     }
     return load<T>(addr, {.forced_virt=false, .hlvx=false, .lr=false, .ss_access=true});
@@ -159,9 +156,6 @@ public:
   template<typename T>
   void ss_store(reg_t addr, T val) {
     if ((addr & (sizeof(T) - 1)) != 0){
-      std::cerr << "Exception trap_store_address_misaligned\n";
-      exit(-1);
-      //M:: excp
       throw trap_store_access_fault((proc) ? proc->state.v : false, addr, 0, 0);
     }
     store<T>(addr, val, {.forced_virt=false, .hlvx=false, .lr=false, .ss_access=true});
@@ -171,25 +165,16 @@ public:
   #define convert_load_traps_to_store_traps(BODY) \
     try { \
       BODY \
-    } catch (trap_load_address_misaligned& t) { \
       /* Misaligned fault will not be triggered by Zicbom */ \
-      std::cerr << "Exception trap_store_address_misaligned\n"; \
-      exit(-1); \
+    } catch (trap_load_address_misaligned& t) { \
       throw trap_store_address_misaligned(t.has_gva(), t.get_tval(), t.get_tval2(), t.get_tinst()); \
     } catch (trap_load_page_fault& t) { \
-      std::cerr << "Exception trap_store_page_fault\n"; \
-      exit(-1); \
       throw trap_store_page_fault(t.has_gva(), t.get_tval(), t.get_tval2(), t.get_tinst()); \
     } catch (trap_load_access_fault& t) { \
-      std::cerr << "Exception trap_store_access_fault\n"; \
-      exit(-1); \
       throw trap_store_access_fault(t.has_gva(), t.get_tval(), t.get_tval2(), t.get_tinst()); \
     } catch (trap_load_guest_page_fault& t) { \
-      std::cerr << "Exception trap_store_guest_page_fault\n"; \
-      exit(-1); \
       throw trap_store_guest_page_fault(t.get_tval(), t.get_tval2(), t.get_tinst()); \
     }
-
   // template for functions that perform an atomic memory operation
   template<typename T, typename op>
   T amo(reg_t addr, op f) {
@@ -228,8 +213,6 @@ public:
   void store_float128(reg_t addr, float128_t val)
   {
     if (unlikely(addr & (sizeof(float128_t)-1)) && !is_misaligned_enabled()) {
-      std::cerr << "Exception trap_store_address_misaligned\n";
-      exit(-1);
       throw trap_store_address_misaligned((proc) ? proc->state.v : false, addr, 0, 0);
     }
 
@@ -240,8 +223,6 @@ public:
   float128_t load_float128(reg_t addr)
   {
     if (unlikely(addr & (sizeof(float128_t)-1)) && !is_misaligned_enabled()) {
-      std::cerr << "Exception trap_load_address_misaligned\n";
-      exit(-1);
       throw trap_load_address_misaligned((proc) ? proc->state.v : false, addr, 0, 0);
     }
 
@@ -275,8 +256,6 @@ public:
         if (tracer.interested_in_range(paddr, paddr + PGSIZE, LOAD))
           tracer.clean_invalidate(paddr, blocksz, clean, inval);
       } else {
-        std::cerr << "Exception trap_store_access_fault\n"; 
-        exit(-1);
         throw trap_store_access_fault((proc) ? proc->state.v : false, transformed_addr, 0, 0);
       }
     })
@@ -298,8 +277,6 @@ public:
     if (sim->reservable(paddr))
       return load_reservation_address == paddr;
     else{
-      std::cerr << "Exception trap_store_access_fault\n";
-      exit(-1);
       throw trap_store_access_fault((proc) ? proc->state.v : false, vaddr, 0, 0);
     }
   }
