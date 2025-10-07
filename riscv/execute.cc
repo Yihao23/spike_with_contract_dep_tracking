@@ -8,6 +8,7 @@
 #include <cassert>
 #include "leakage.h"
 #include "platform.h"
+#include "dep.h"
 
 static void commit_log_reset(processor_t* p)
 {
@@ -159,13 +160,16 @@ inline void processor_t::update_histogram(reg_t pc)
 }
 
 struct Leakage leakage;
+// class Dep_tracker *dep_tracking;
 // These two functions are expected to be inlined by the compiler separately in
 // the processor_t::step() loop. The logged variant is used in the slow path
-static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch) {
+static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker) //M:: execute instruction and update pc{
+{
+  add_dependency(dep_tracker, pc, fetch.insn, p);
   add_leakage(&leakage, pc, fetch.insn, fetch.func, p);
   return fetch.func(p, fetch.insn, pc);
 }
-static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch) //M:: execute instruction and update pc
+static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker) //M:: execute instruction and update pc
 {
   if (p->get_log_commits_enabled()) {
     commit_log_reset(p);
@@ -204,6 +208,7 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
   }
   p->update_histogram(pc);
 
+  add_dependency(dep_tracker, pc, fetch.insn, p);
   add_leakage(&leakage, npc, fetch.insn, fetch.func, p);
 
   return npc;
@@ -276,6 +281,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         {
          
           delete_all_leaks(&leakage);
+          Dep_tracker dep_tracker(pc);
           init_leaks(&leakage);
           if (unlikely(!state.serialized && state.single_step == state.STEP_STEPPED)) {
             state.single_step = state.STEP_NONE;
@@ -307,7 +313,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
           insn_fetch_t fetch = mmu->load_insn(pc); //M:: fetch instruction from I$ and decode it
           if (debug && !state.serialized)
             disasm(fetch.insn);
-          pc = execute_insn_logged(this, pc, fetch); //M:: inside this
+          pc = execute_insn_logged(this, pc, fetch, dep_tracker); //M:: inside this
           advance_pc();
 
           // Resume from debug mode in critical error
@@ -327,10 +333,11 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
       {
         // Main simulation loop, fast path.
         delete_all_leaks(&leakage);
+        Dep_tracker dep_tracker(pc);
         init_leaks(&leakage);
         for (auto ic_entry = _mmu->access_icache(pc); ; ) {
           auto fetch = ic_entry->data;
-          pc = execute_insn_fast(this, pc, fetch); //M:: inside this
+          pc = execute_insn_fast(this, pc, fetch, dep_tracker); //M:: inside this
           ic_entry = ic_entry->next;
           if (unlikely(ic_entry->tag != pc))
             break;
