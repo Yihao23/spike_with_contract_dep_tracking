@@ -52,6 +52,7 @@ riscv_srcs = \
 	processor.cc \
 	execute.cc \
 	leakage.cc \
+	dep.cc \
 	dts.cc \
 	sim.cc \
 	interactive.cc \

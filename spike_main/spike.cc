@@ -24,7 +24,9 @@
 #include "../VERSION"
 
 uint64_t contract = TOP;
-FILE *leak_out = nullptr;
+std::ofstream leak_out;
+// FILE * leak_out;
+std::ofstream dep_out;
 
 static void help(int exit_code = 1)
 {
@@ -322,7 +324,9 @@ static std::vector<size_t> parse_hartids(const char *s)
 
 void close_logs()
 {
-  fclose(leak_out);
+  // fclose(leak_out);
+  leak_out.close();
+  dep_out.close();
 }
 
 int main(int argc, char** argv)
@@ -483,7 +487,9 @@ int main(int argc, char** argv)
   });
 
   parser.option(0, "o", 1, [&](const char* s){
-    leak_out = fopen(s, "w");
+    // leak_out = fopen(s, "w");
+    dep_out.open("dep_tracking.txt");
+    leak_out.open(s, std::ios::out | std::ios::trunc);
   });
 
   auto argv1 = parser.parse(argv);

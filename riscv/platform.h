@@ -1,5 +1,6 @@
 // See LICENSE for license details.
 #include <stdio.h>
+#include <fstream>
 #ifndef _RISCV_PLATFORM_H
 #define _RISCV_PLATFORM_H
 
@@ -23,7 +24,9 @@
 #define DEFAULT_CTR        "top"
 
 extern uint64_t contract;
-extern FILE * leak_out;
+// extern FILE * leak_out;
+extern std::ofstream leak_out;
+extern std::ofstream dep_out;
 
 #define SEQ_CT 0
 #define SEQ_ARCH 1
