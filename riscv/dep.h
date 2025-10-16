@@ -91,7 +91,6 @@ enum class Target : uint16_t {
     X8 = 8, X7 = 7, X6 = 6, X5 = 5, X4 = 4, X3 = 3, X2 = 2, X1 = 1, X0 = 0
 };
 
-void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p);
 
 inline uint64_t to_i(Target t){ return static_cast<uint64_t>(t); }
 inline Target   to_T(uint64_t v){ return static_cast<Target>(v); }
@@ -136,12 +135,12 @@ struct snapshot {
   std::vector<weak_dependency> weak_deps;
   std::vector<prog_position> weak_dep_positions;
 
-  std::unique_ptr<snapshot> prev;
+  std::shared_ptr<snapshot> prev;
 };
 
 struct mem_entry {
   uint64_t addr{};
-  std::unique_ptr<snapshot> cur; // current dependency snapshot for this byte
+  std::shared_ptr<snapshot> cur; // current dependency snapshot for this byte
 
   //no *next; done in Dep_tracker
 };
@@ -149,7 +148,7 @@ struct mem_entry {
 class Dep_tracker {
 public:
   explicit Dep_tracker(reg_t initial_pc)
-    : instr_(1), pc_(initial_pc) {
+    : instr_(0), pc_(initial_pc) {
     vault_.resize(NUMBER_OF_DEPENDENCIES);
     for (uint16_t i = 0; i < NUMBER_OF_DEPENDENCIES; ++i) {
       vault_[i] = std::make_unique<snapshot>();
@@ -182,7 +181,7 @@ public:
   // Commit current target (ACCU & ACCU_PC) into vault
   bool commit_target();
 
-  // bool next_instruction(uint64_t new_pc);
+  bool next_instruction(reg_t new_pc);
 
   // maybe add json later
   void finish(std::ostream& out);
@@ -203,7 +202,7 @@ private:
   static bool is_freg(Target t){ return to_i(t) >= 32 && to_i(t) < 64; }
   static bool is_csr (Target t){ return to_i(t) >= 64 && to_i(t) < 93; }
 
-  Target lift_fp(uint8_t ir_bits, Target t, bool is_target){
+  Target lift_to_fp(uint8_t ir_bits, Target t, bool is_target){
     if (t == Target::MEM || t == Target::PC || t == Target::IMM || t==Target::NONE) return t;
     bool need_fp = is_target ? (ir_bits & 0b10) : (ir_bits & 0b01);
     if (!need_fp && is_xreg(t)) return to_T(to_i(t)+32); // int->float
@@ -274,6 +273,9 @@ private:
     a->name = (a == accu()) ? Target::ACCU : Target::ACCU_PC;
   }
 };
+
+void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p);
+
 #endif 
 
 

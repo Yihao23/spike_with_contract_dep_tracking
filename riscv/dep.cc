@@ -3,6 +3,9 @@
 //add each index as dep
 //add that index's previous deps
 //check imm
+// test current
+//debug
+//refine
 
 
 bool Dep_tracker::track_dependency(Target target, Target source,
@@ -11,8 +14,8 @@ bool Dep_tracker::track_dependency(Target target, Target source,
                         bool csr_implicit){
   //pc_ = pc;
   csr_impl_ = csr_implicit;
-  target = lift_fp(int_float_relation, target, true);
-  source = lift_fp(int_float_relation, source, false);
+  // target = lift_to_fp(int_float_relation, target, true);
+  // source = lift_to_fp(int_float_relation, source, false);
 
   auto* A = (target==Target::PC) ? accu_pc() : accu();
   if (A->name != Target::ACCU && A->name != Target::ACCU_PC && A->name != target){
@@ -58,8 +61,8 @@ bool Dep_tracker::track_memory(Target target, Target source,
                               uint64_t addr, uint8_t width,
                               uint8_t ir)
 {
-  target = lift_fp(ir, target, true);
-  source = lift_fp(ir, source, false);
+  // target = lift_to_fp(ir, target, true);
+  // source = lift_to_fp(ir, source, false);
 
   auto* A = accu();
   if (A->name!=Target::ACCU && A->name!=target) return false;
@@ -116,55 +119,58 @@ bool Dep_tracker::commit_target(){
   return true;
 }
 
-// bool Dep_tracker::next_instruction(uint64_t new_pc){
-//   pc_ = new_pc;
-//   ++instr_;
-//   return true;
-// }
+bool Dep_tracker::next_instruction(reg_t new_pc){
+  pc_ = new_pc;
+  ++instr_;
+  return true;
+}
 
 void Dep_tracker::finish(std::ostream& out){
   // minimal report: list each reg with its latest direct deps
-  out << "=== Dependencies ===\n";
-  for (uint16_t i=0;i<NBR_OF_ACTUAL_DEPENDENCIES;i++){
-    auto* s = vault_[i].get();
-    if (!s || s->name==Target::ACCU || s->name==Target::ACCU_PC) continue;
-    out << "T" << i << ": ";
-    bool first = true;
-    for (auto t : s->current_deps){
-      if (t==Target::NONE) continue;
-      if (!first) out << ", ";
-      out << "-> T" << to_i(t);
-      first = false;
-    }
-    if (first) out << "(self/initial)";
-    out << "\n";
-  }
-  out << "=== Memory bytes ===\n";
+  // out << "=== Dependencies ===\n";
+  // for (uint16_t i=0;i<NBR_OF_ACTUAL_DEPENDENCIES;i++){
+  //   auto* s = vault_[i].get();
+  //   if (!s || s->name==Target::ACCU || s->name==Target::ACCU_PC) continue;
+  //   out << "T" << i << ": ";
+  //   bool first = true;
+  //   for (auto t : s->current_deps){
+  //     if (t==Target::NONE) continue;
+  //     if (!first) out << ", ";
+  //     out << "-> T" << to_i(t);
+  //     first = false;
+  //   }
+  //   if (first) out << "(self/initial)";
+  //   out << "\n";
+  // }
+  out << "=== Memory ===\n";
   for (auto& [addr, me] : mem_){
-    out << "MEM[" << std::hex << addr << std::dec << "]: ";
-    auto* s = me.cur.get();
-    bool first = true;
-    for (auto t : s->current_deps){
-      if (t==Target::NONE) continue;
-      if (!first) out << ", ";
-      out << "-> T" << to_i(t);
-      first = false;
-    }
-    if (first) out << "(initial)";
-    out << "\n";
+    out << std::dec << addr << std::dec << "\n";
+    // auto* s = me.cur.get();
+    // bool first = true;
+    // for (auto t : s->current_deps){
+    //   if (t==Target::NONE) continue;
+    //   if (!first) out << ", ";
+    //   out << "-> T" << to_i(t);
+    //   first = false;
+    // }
+    // if (first) out << "(initial)";
+    // out << "\n";
   }
 }
 
 
 void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p)
 {
+  // for now we don't support fp regs. Later we should lift_to_fp first.
+  Target rs1 = to_T(insn.rs1());
+  Target rs2 = to_T(insn.rs2());
+  Target rd  = to_T(insn.rd());
+
   switch (insn.opcode()){
 
     /*arth- reg*/
     case 0b0110011:
-      Target rs1 = to_T(insn.rs1());
-      Target rs2 = to_T(insn.rs2());
-      Target rd  = to_T(insn.rd());
+    {
       if (insn.rd() != 0) {
         dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false);
         dep_tracker.track_dependency(rd, rs2, RS2_INDEX, 0b11, false);
@@ -172,11 +178,13 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
       }
       dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       break;
+    }
   
     /*arth- imm*/
     case 0b0010011:
-        Target rs1 = to_T(insn.rs1());
-        Target rd  = to_T(insn.rd());
+    {
+        // Target rs1 = to_T(insn.rs1());
+        // Target rd  = to_T(insn.rd());
         if (insn.rd() != 0) {
           dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false);
           dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false);
@@ -184,11 +192,12 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
         }
         dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       break;
-  
+    }
     /*load*/
     case 0b0000011:
-        Target rs1 = to_T(insn.rs1());
-        Target rd  = to_T(insn.rd());
+    {
+        // Target rs1 = to_T(insn.rs1());
+        // Target rd  = to_T(insn.rd());
         uint64_t width = 1 << ((insn.funct3() & 0b11) ); // 0=byte,1=half,2=word,3=double
         if (insn.funct3() == 0b100) width = 4; // LBU
         if (insn.funct3() == 0b101) width = 4; // LHU
@@ -196,13 +205,16 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
         if (insn.funct3() == 0b111) width = 8; // LDWU
         dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false);
         dep_tracker.track_memory(rd, Target::MEM, insn.i_imm()+RS1, width,0);
+        dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false);
         dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       break;
+    }
   
     /*store*/
     case 0b0100011:
-        Target rs1 = to_T(insn.rs1());
-        Target rs2 = to_T(insn.rs2());
+    {
+        // Target rs1 = to_T(insn.rs1());
+        // Target rs2 = to_T(insn.rs2());
         uint64_t width = 1 << ((insn.funct3() & 0b11) ); // 0=byte,1=half,2=word,3=double
         if (insn.funct3() == 0b100) width = 4; // SB
         if (insn.funct3() == 0b101) width = 4; // SH
@@ -211,25 +223,28 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
         dep_tracker.track_memory(Target::MEM, rs2, insn.s_imm()+RS1, width,0);
         dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       break;
-  
+    }
     /*jal*/
     case 0b1111111:
+    {
       dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false);
       break;
-    
+    }
     /*jalr*/  
     case 0b1110111:
-      Target rs1 = to_T(insn.rs1());
+    {
+      // Target rs1 = to_T(insn.rs1());
       dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false);
       dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false);
       break;
-  
+    }
     /*branch*/
     case 0b1100011:
-        Target rs1 = to_T(insn.rs1());
-        Target rs2 = to_T(insn.rs2());
+    {
+        // Target rs1 = to_T(insn.rs1());
+        // Target rs2 = to_T(insn.rs2());
         dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false);
         dep_tracker.track_dependency(Target::PC, rs2, RS2_INDEX, 0b11, false);
 
@@ -262,9 +277,12 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
           dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false);
 
       break;
-  
-    /*csr??*/
-    // case 0b1110011:
+    }
+
+    default:
+    {
       break;
+    }
   }
+  dep_tracker.commit_target();
 }
