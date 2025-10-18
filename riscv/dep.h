@@ -18,6 +18,7 @@
 #include "mmu.h"
 #include "disasm.h"
 #include "decode_macros.h"
+#include "leakage.h"
 
 
 #define NBR_OF_ACTUAL_DEPENDENCIES 94
@@ -185,6 +186,8 @@ public:
 
   // maybe add json later
   void finish(std::ostream& out);
+
+  void save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file);
 
 private:
 
