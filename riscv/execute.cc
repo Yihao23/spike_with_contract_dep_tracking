@@ -283,7 +283,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         while (instret < n)
         {
          
-          // leakages.delete_all_leaks();
+          leakages.delete_all_leaks();
           // Dep_tracker dep_tracker(pc);
           // init_leaks(&leakage);
           if (unlikely(!state.serialized && state.single_step == state.STEP_STEPPED)) {
@@ -318,6 +318,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
             disasm(fetch.insn);
           pc = execute_insn_logged(this, pc, fetch, dep_tracker,leakages); //M:: inside this
           advance_pc();
+          dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
           dep_tracker.next_instruction(pc);
 
           // Resume from debug mode in critical error
@@ -339,7 +340,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
       else while (instret < n)
       {
         // Main simulation loop, fast path.
-        // leakages.delete_all_leaks();
+        leakages.delete_all_leaks();
         // Dep_tracker dep_tracker1(pc);
         // dep_tracker.next_instruction(pc);
         // init_leaks(&leakage);
@@ -355,6 +356,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
           state.pc = pc;
         }
         advance_pc();
+        dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
         dep_tracker.next_instruction(pc);
         // print_leaks(leak_out, &leakage);
         // leakages.print_leaks(leak_out);

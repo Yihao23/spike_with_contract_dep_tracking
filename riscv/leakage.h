@@ -13,17 +13,18 @@
 #include <string>
 #include <ostream>
 #include "dep.h"
+struct Leak {
+    std::string  loc;
+    std::uint64_t value{}; 
+    std::uint64_t dep_reg1{};
+    std::uint64_t dep_reg2{};
+};
 
 class Leakage {
 public:
-    struct Leak {
-        std::string  loc;
-        std::uint64_t value{}; 
-        std::uint64_t dep_reg{};
-    };
 
-    void add_leak(std::string loc, std::uint64_t value, std::uint64_t dep_reg) {
-        leaks_.emplace_back(Leak{std::move(loc), value, dep_reg});
+    void add_leak(std::string loc, std::uint64_t value, std::uint64_t dep_reg1= NULL, std::uint64_t dep_reg2 = NULL) {
+        leaks_.emplace_back(Leak{std::move(loc), value, dep_reg1,dep_reg2});
     }
 
     void print_leaks(std::ostream& File) const {
@@ -40,7 +41,8 @@ public:
     std::size_t size() const noexcept { return leaks_.size(); }
     bool delete_all_leaks() const noexcept { return leaks_.empty(); }
 
-    const std::deque<Leak>& leaks() const noexcept { return leaks_; }
+    std::deque<Leak> leaks() const noexcept { return leaks_; }
+    // const std::deque<Leak>& leaks() const noexcept { return leaks_; }
 
 private:
     std::deque<Leak> leaks_; 

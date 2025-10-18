@@ -158,6 +158,11 @@ void Dep_tracker::finish(std::ostream& out){
   }
 }
 
+void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file){
+  //
+  
+}
+
 
 void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p)
 {
@@ -286,3 +291,4 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
   }
   dep_tracker.commit_target();
 }
+
