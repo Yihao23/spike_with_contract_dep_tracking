@@ -16,6 +16,7 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
     
     if (insn.opcode()==0b0000011 ) //load addr
         leaks.add_leak("LOAD",insn.i_imm()+RS1,insn.rs1());
+        //also adding memory addr's dependency in dep_tracker
 
     else if(insn.opcode()==0b0100011) //store addr
         leaks.add_leak("STORE",insn.i_imm()+RS1,insn.rs1());
@@ -56,11 +57,12 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
                 taken=1;
             // leaks.add_leak( "taken", taken);
         }
-        leaks.add_leak( "taken", taken,insn.rs1(), insn.rs2());
+        leaks.add_leak( "taken", taken, insn.rs1(), insn.rs2());
     }
 
     if (insn.opcode()==0b0110011 && (contract==SEQ_BM || contract==TOP)) {
-        leaks.add_leak("M rs1", RS1, insn.rs1(), insn.rs2());
+        leaks.add_leak("M rs1", RS1, insn.rs1());
+        leaks.add_leak("M rs2", RS2, insn.rs2());
     }
 
 }
