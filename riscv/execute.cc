@@ -165,7 +165,7 @@ inline void processor_t::update_histogram(reg_t pc)
 // the processor_t::step() loop. The logged variant is used in the slow path
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker, Leakage &leakages) //M:: execute instruction and update pc{
 {
-  add_dependency(dep_tracker, pc, fetch.insn, p);
+  add_dependency(dep_tracker, pc, fetch.insn, p, dep_out);
   add_leakage(leakages, pc, fetch.insn, fetch.func, p);
   return fetch.func(p, fetch.insn, pc);
 }
@@ -208,7 +208,7 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
   }
   p->update_histogram(pc);
 
-  add_dependency(dep_tracker, pc, fetch.insn, p);
+  add_dependency(dep_tracker, pc, fetch.insn, p, dep_out);
   add_leakage(leakages, npc, fetch.insn, fetch.func, p);
 
   return npc;
@@ -418,5 +418,5 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
   }
   leakages.print_leaks(leak_out);
   leakages.delete_all_leaks();
-  dep_tracker.finish(dep_out);
+  // dep_tracker.finish(dep_out);
 }

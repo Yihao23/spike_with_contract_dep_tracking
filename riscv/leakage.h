@@ -12,12 +12,13 @@
 #include <deque>
 #include <string>
 #include <ostream>
-#include "dep.h"
+// #include "dep.h"
 struct Leak {
     std::string  loc;
     std::uint64_t value{}; 
     std::uint64_t dep_reg1{};
     std::uint64_t dep_reg2{};
+    //normally one dep reg except for branches and mul/div
 };
 
 class Leakage {

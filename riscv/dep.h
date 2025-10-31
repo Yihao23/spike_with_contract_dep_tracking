@@ -18,7 +18,9 @@
 #include "mmu.h"
 #include "disasm.h"
 #include "decode_macros.h"
-#include "leakage.h"
+// #include "leakage.h"
+
+struct Leak;
 
 
 #define NBR_OF_ACTUAL_DEPENDENCIES 94
@@ -142,6 +144,7 @@ struct snapshot {
 struct mem_entry {
   uint64_t addr{};
   std::shared_ptr<snapshot> cur; // current dependency snapshot for this byte
+  std::shared_ptr<snapshot> sec_dep_for_store;
 
   //no *next; done in Dep_tracker
 };
@@ -223,15 +226,19 @@ private:
   snapshot* accu()    { return vault_[to_i(Target::ACCU)].get(); }
   snapshot* accu_pc() { return vault_[to_i(Target::ACCU_PC)].get(); }
 
-  mem_entry& get_mem(uint64_t addr){
-    auto [it,ins] = mem_.emplace(addr, mem_entry{addr,{}});
-    if (ins) {
-      it->second.cur = std::make_unique<snapshot>(*remaining_mem_);
-      it->second.cur->initial_mem = {addr};
-      it->second.cur->weak_deps = remaining_mem_->weak_deps;
-      it->second.cur->name = Target::MEM;
+  mem_entry& get_mem(uint64_t addr){ //build a new mem_entry object for the new addr and save its deps.
+    auto it = mem_.find(addr);
+    if (it != mem_.end()) return it->second;
+    else {
+      auto [it,ins] = mem_.emplace(addr, mem_entry{addr,{}});
+      if (ins) {
+        it->second.cur = std::make_unique<snapshot>(*remaining_mem_);
+        it->second.cur->initial_mem = {addr};
+        it->second.cur->weak_deps = remaining_mem_->weak_deps;
+        it->second.cur->name = Target::MEM;
+      }
+      return it->second;
     }
-    return it->second;
   }
 
   void add_initials_from(const snapshot* src, snapshot* dst){
@@ -255,12 +262,10 @@ private:
     if (a->name == Target::MEM) {
       for (auto b : last_bytes_) {
         if (!b) break;
-        std::unique_ptr<snapshot> ns = std::make_unique<snapshot>(*a);
-        ns->name = Target::MEM;
-        ns->prev = std::move(b->cur);
-        b->cur = std::move(ns);
-        // also mark target position for mem byte
-        // record the address in dep_pos[BYTE1] as an example)
+        // std::unique_ptr<snapshot> ns = std::make_unique<snapshot>(*a);
+        // ns->name = Target::MEM;
+        // ns->prev = std::move(b->cur);
+        b->cur = std::make_unique<snapshot>(*a);
       }
       // weak dep positions for other memory:
     } else {
@@ -277,7 +282,7 @@ private:
   }
 };
 
-void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p);
+void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p, std::ostream& dep_file);
 
 #endif 
 
