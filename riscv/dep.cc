@@ -297,7 +297,7 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
         if (insn.funct3() == 0b110) width = 4; // SW
         if (insn.funct3() == 0b111) width = 8; // SD
         dep_tracker.track_memory(Target::MEM, rs1, insn.s_imm()+RS1, width,0);
-        dep_tracker.track_memory(Target::MEM, rs2, insn.s_imm()+RS1, width,0);
+        dep_tracker.track_memory(Target::MEM, rs2, insn.s_imm()+RS2, width,0);
         dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       break;
     }
