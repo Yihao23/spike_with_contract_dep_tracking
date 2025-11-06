@@ -73,6 +73,11 @@ enum WORD_WIDTH {
     BYTE = 1, HALF = 2, WORD = 4, DOUBLE = 8
 };
 
+enum INIT_STATE {
+    OVERWRITE = 0,
+    ADD = 1
+};
+
 // enum Target {
 enum class Target : uint16_t {
     PC = 93, ACCU = 94, ACCU_PC = 95, MEM = 96, NONE = 97, IMM = 98, REMAINING_MEM = 99,
@@ -144,7 +149,6 @@ struct snapshot {
 struct mem_entry {
   uint64_t addr{};
   std::shared_ptr<snapshot> cur; // current dependency snapshot for this byte
-  std::shared_ptr<snapshot> sec_dep_for_store;
 
   //no *next; done in Dep_tracker
 };
@@ -175,20 +179,17 @@ public:
   bool track_dependency(Target target, Target source,
                         uint16_t source_pos,
                         uint8_t int_float_relation,
-                        bool csr_implicit);
+                        bool csr_implicit, INIT_STATE state);
 
   // Memory interaction: LOAD (source==MEM) or STORE (target==MEM)
   bool track_memory(Target target, Target source,
                     uint64_t addr, uint8_t width,
-                    uint8_t int_float_relation);
+                    uint8_t int_float_relation, INIT_STATE state);
 
   // Commit current target (ACCU & ACCU_PC) into vault
   bool commit_target();
 
   bool next_instruction(reg_t new_pc);
-
-  // maybe add json later
-  void finish(std::ostream& out);
 
   void save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file);
 
@@ -241,12 +242,19 @@ private:
     }
   }
 
-  void add_initials_from(const snapshot* src, snapshot* dst){
+  void add_initials_from(const snapshot* src, snapshot* dst, INIT_STATE state){
     if (!src) return;
-    dst->initial_regs |= src->initial_regs;
-    for (auto a : src->initial_mem) {
-      if (std::find(dst->initial_mem.begin(), dst->initial_mem.end(), a) == dst->initial_mem.end())
-        dst->initial_mem.push_back(a);
+    if (state == INIT_STATE::OVERWRITE) {
+      dst->initial_regs = src->initial_regs;
+      dst->initial_mem = src->initial_mem;
+      return;
+    }
+    else if( state == INIT_STATE::ADD) {
+      dst->initial_regs |= src->initial_regs;
+      for (auto a : src->initial_mem) {
+        if (std::find(dst->initial_mem.begin(), dst->initial_mem.end(), a) == dst->initial_mem.end())
+          dst->initial_mem.push_back(a);
+      }
     }
   }
 
@@ -256,16 +264,17 @@ private:
     if (a->name != Target::X0 && a->name != Target::NONE) {
       a->current_deps[PC_INDEX] = Target::PC;
       a->dep_pos[PC_INDEX] = cur_pos(PC_DEP);
-      add_initials_from(vault_[to_i(Target::PC)].get(), a);
+      add_initials_from(vault_[to_i(Target::PC)].get(), a, INIT_STATE::ADD);
     }
 
     if (a->name == Target::MEM) {
       for (auto b : last_bytes_) {
         if (!b) break;
-        // std::unique_ptr<snapshot> ns = std::make_unique<snapshot>(*a);
+        std::unique_ptr<snapshot> ns = std::make_unique<snapshot>(*a);
+        add_initials_from(a,b->cur.get(), INIT_STATE::OVERWRITE);
         // ns->name = Target::MEM;
         // ns->prev = std::move(b->cur);
-        b->cur = std::make_unique<snapshot>(*a);
+        // b->cur = std::make_uni/que<snapshot>(*a);
       }
       // weak dep positions for other memory:
     } else {
@@ -284,107 +293,4 @@ private:
 
 void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p, std::ostream& dep_file);
 
-#endif 
-
-
-//   abstract_dependency* create_abstract_dependency(enum Target name);
-
-//   void populate_target_pos_with_initial_values(abstract_dependency* dependency);
-
-//   void create_weak_deps_mem();
-
-//   void create_dep_vault();
-
-//   bool new_program(uint64_t pc_value);
-
-//   unsigned long long get_instruction();
-
-//   prog_position* insert_position_into_set(prog_position* insert, prog_position* set);
-
-//   prog_position* copy_position(prog_position* position_to_copy);
-
-//   prog_position* create_current_position(uint64_t pos);
-
-//   bool add_position(enum Target name, uint64_t index, abstract_dependency* abstract_deps, uint64_t pos, bool isTarget);
-
-//   bool check_memory_address_in_initial_memory(uint64_t memory_address, initial_memory_address* current_initial_memory);
-
-//   void update_initial_dependencies(abstract_dependency* target_deps, abstract_dependency* source_deps);
-
-//   bool update_graph(enum Target accu_name, enum Target source, uint64_t *index, abstract_dependency* abstract_deps);
-
-//   initial_memory_address* copy_initial_memory_dependencies(initial_memory_address* initial_memory_dependencies);
-
-//   bool save_history_of_and_add_new_dependencies(enum Target name, abstract_dependency* accu_deps, bool second_or_more_copy);
-
-//   bool add_dependency(enum Target target, enum Target source, uint64_t source_position);
-
-//   inline bool split_source_high_csr_to_low_csrs(uint64_t target, uint64_t source, uint64_t source_position);
-
-//   inline bool split_target_high_csr_to_low_csrs_and_save_from_accu(enum Target target, abstract_dependency* accu_deps);
-
-//   inline bool split_target_high_csr_to_low_csrs_and_add_position(enum Target target, uint64_t target_position);
-
-//   inline uint64_t lift_register_to_floating_point_reg(uint64_t int_float_relation, uint64_t reg);
-   
-//   void set_pmp_locked_c(uint64_t target);
-
-//   void remove_pmp_locked_c(uint64_t target);
-
-//   bool track_dependency_c(uint64_t target, uint64_t source, uint64_t source_position, uint64_t int_float_relation, bool csr_implicit);
-
-//   bool new_instruction();
-
-//   bool update_dependencies_from_accu(enum Target accu_type);
-   
-//   bool track_new_target_within_same_instruction_c(void);
-
-//   bool end_and_reset_instruction_tracking_c(uint64_t pc_value);
-
-//   void update_CSRs_weak_dependencies_c(void);
-
-//   abstract_dependency* copy_from_weak_deps_mem(uint64_t address);
-
-//   global_memory_store* get_address_from_memory_vault(uint64_t address);
-
-//   inline weak_dependency* create_new_weak_dependency(uint64_t source, uint64_t address, uint64_t width); 
-
-//   bool track_memory_c(uint64_t target, uint64_t source, uint64_t address, uint64_t width, uint64_t int_float_relation);
-
-//   void destroy_initial_memory_dependencies(initial_memory_address *init_mem_addr);
-
-//   void destroy_weak_dependencies(weak_dependency* weak_deps);
-
-//   void destroy_position_list(prog_position* prog_position_ptr);
-
-//   void destroy_abstract_dependency(abstract_dependency* abstract_deps_ptr);
-
-//   void destroy_dep_vault();
-
-//   void destroy_memory_addresses(); 
-
-//   void add_initial_values(abstract_dependency *current_dependency);
-
-//   bool save_dependency(uint64_t dep_reg);
-
-//   void save_leakage_dependencies_to_file(FILE *dest); 
-
-//   cJSON* create_json_string(prog_position* current_prog_position);
-  
-//   void populate_position_list(prog_position* current_prog_position, cJSON* json_positions);
-  
-//   void add_reg_name_to_json(const char *prefix, enum Target dependency_name, cJSON* json_dependencies, cJSON* json_object, bool is_array);
-  
-//   void populate_weak_dependencies_list(weak_dependency* weak_dependencies,cJSON* json_weak_dependencies);
-
-//   int populate_indirect_dependencies(cJSON* json_depends_on_initial_values, abstract_dependency* indirect_dependencies); 
-  
-//   int add_target_name_to_json_array(cJSON* json_array, enum Target dependency_name);
-  
-//   int populate_abstract_json_object(cJSON* json_abstract_object, abstract_dependency* current_dependency, enum Target current_name, uint64_t memory_address);
-
-//   int populate_json(cJSON* object); 
-
-//   int save_to_json();
-
-//   void end_dependency_tracking_c(FILE *dest);
+#endif
