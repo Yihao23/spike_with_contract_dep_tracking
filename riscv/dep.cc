@@ -160,10 +160,14 @@ void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& de
 
     snapshot* s = vault_[start_idx].get();
     
-    for (uint16_t i = 0; i < OFFSET_TO_FREGS; ++i)
-      if (s->initial_regs.test(i)) dep_file << "R" << i << "\n";
+    // for (uint16_t i = 0; i < OFFSET_TO_FREGS; ++i)
+    //   if (s->initial_regs.test(i)) dep_file << "R" << i << "\n";
 
-    for (auto a : s->initial_mem) dep_file << a << "\n";
+    for (size_t i = 0; i < s->initial_mem.size(); ++i){
+      if (std::find(s->initial_mem.begin(), s->initial_mem.begin() + i, s->initial_mem[i]) == s->initial_mem.begin() + i)
+        dep_file << s->initial_mem[i] << "\n";
+    }
+
 
 
     
