@@ -156,7 +156,6 @@ void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& de
 
   for (auto start_idx: {cur_leak.dep_reg1, cur_leak.dep_reg2}) {
     //cause most of the times dep reg2 is null.
-    snapshot* s;
     if (start_idx == NULL) break; 
 
     snapshot* s = vault_[start_idx].get();
