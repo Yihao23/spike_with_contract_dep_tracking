@@ -20,6 +20,7 @@
 #include <limits>
 #include <cinttypes>
 #include <sstream>
+#include <algorithm>
 #include "platform.h"
 #include "../VERSION"
 
@@ -584,6 +585,24 @@ int main(int argc, char** argv)
   s.set_histogram(histogram);
 
   auto return_code = s.run(); //M:: running point
+
+  dep_out.close();
+
+
+  std::vector<std::string> lines;
+  {
+    std::ifstream in("dep_tracking.txt");
+    std::string s;
+    while (std::getline(in, s)) lines.push_back(std::move(s));
+  }
+
+  std::sort(lines.begin(), lines.end());
+  lines.erase(std::unique(lines.begin(), lines.end()), lines.end());
+
+  {
+    std::ofstream out("dep_tracking.txt", std::ios::trunc);
+    for (const auto& L : lines) out << L << '\n';
+  }
 
   close_logs();
 
