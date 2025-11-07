@@ -154,18 +154,12 @@ void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& de
   //     need_mem.push_back(a);
   // };
 
-  for (auto start_idx: {cur_leak.dep_reg1, cur_leak.dep_reg2, cur_leak.mem_adr}) {
+  for (auto start_idx: {cur_leak.dep_reg1, cur_leak.dep_reg2}) {
     //cause most of the times dep reg2 is null.
     snapshot* s;
     if (start_idx == NULL) break; 
 
-    if (start_idx == cur_leak.mem_adr) {
-      auto mem = mem_.find(start_idx);
-      s= mem != mem_.end() ? mem->second.cur.get() : nullptr;
-    }
-    else snapshot* s = vault_[start_idx].get();
-
-    if (!s) continue;
+    snapshot* s = vault_[start_idx].get();
     
     for (uint16_t i = 0; i < OFFSET_TO_FREGS; ++i)
       if (s->initial_regs.test(i)) dep_file << "R" << i << "\n";
@@ -313,13 +307,15 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
         if (insn.funct3() == 0b111) width = 8; // SD
         dep_tracker.track_memory(Target::MEM, rs1, insn.s_imm()+RS1, width,0, INIT_STATE::OVERWRITE);
         dep_tracker.track_memory(Target::MEM, rs2, insn.s_imm()+RS2, width,0, INIT_STATE::ADD);
-        dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+        dep_tracker.track_memory(Target::MEM, Target::PC, PC_INDEX,width,0, INIT_STATE::ADD);
+        // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       break;
     }
     /*jal*/
     case 0b1111111:
     {
       // dep_file<< "jal\n";
+      // dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
       break;
