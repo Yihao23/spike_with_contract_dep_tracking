@@ -488,7 +488,6 @@ int main(int argc, char** argv)
   });
 
   parser.option(0, "o", 1, [&](const char* s){
-    // leak_out = fopen(s, "w");
     dep_out.open("dep_tracking.txt");
     leak_out.open(s, std::ios::out | std::ios::trunc);
   });

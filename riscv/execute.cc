@@ -159,8 +159,6 @@ inline void processor_t::update_histogram(reg_t pc)
     pc_histogram[pc]++;
 }
 
-// struct Leakage leakage;
-// class Dep_tracker *dep_tracking;
 // These two functions are expected to be inlined by the compiler separately in
 // the processor_t::step() loop. The logged variant is used in the slow path
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker, Leakage &leakages) //M:: execute instruction and update pc{
@@ -331,10 +329,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
               enter_debug_mode(DCSR_CAUSE_HALT, 0);
             }
           }
-          // print_leaks(leak_out,&leakage);
-          // leakages.print_leaks(leak_out);
           // leakages.delete_all_leaks();
-          // dep_tracker.finish(dep_out);
         }
       }
       else while (instret < n)
@@ -358,10 +353,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         advance_pc();
         dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
         dep_tracker.next_instruction(pc);
-        // print_leaks(leak_out, &leakage);
-        // leakages.print_leaks(leak_out);
         // leakages.delete_all_leaks();
-        // dep_tracker1.finish(dep_out);
       }
     }
     catch(trap_t& t) //M:: excp
@@ -418,5 +410,4 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
   }
   leakages.print_leaks(leak_out);
   leakages.delete_all_leaks();
-  // dep_tracker.finish(dep_out);
 }
