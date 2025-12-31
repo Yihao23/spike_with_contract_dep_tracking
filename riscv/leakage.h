@@ -49,32 +49,6 @@ private:
     std::deque<Leak> leaks_; 
 };
 
-
-
-// struct Leak {
-//         char loc[8];
-//         u_int64_t leak;
-//         //linked list entry
-//         SLIST_ENTRY(Leak) leaks;
-//         u_int64_t dep_reg;
-//     };
-//     struct Leakage {
-//             //list of leaks in the "leakage"
-//             SLIST_HEAD(,Leak) head; 
-// };
-
 void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, processor_t *p);
 
-// void add_leak(struct Leakage *f, const char *location, u_int64_t value/*,  u_int64_t DepReg*/);
-
-
-// void print_leaks(FILE *dest, struct Leakage *f);
-
-// void delete_leak(struct Leakage *f);
-
-
-// void delete_all_leaks(struct Leakage *f);
-
-
-// void init_leaks(struct Leakage *f);
 #endif

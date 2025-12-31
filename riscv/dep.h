@@ -20,17 +20,41 @@
 #include "decode_macros.h"
 // #include "leakage.h"
 
+//------------------------------------------------------
+// This module tracks data dependencies between architectural targets while Spike executes.
+// The core idea:
+//  * During the execution of a single instruction, we collect edges in an
+//    accumulator snapshot (ACCU or ACCU_PC).
+//  * When the instruction commits, we "push" that accumulator into the vault
+//    entry of the written target (reg/csr/pc) or the affected memory bytes.
+//  * Each vault entry is a linked list (via snapshot::prev) of snapshots over
+//    time, so you can traverse backwards to earlier versions.
+//  * A snapshot contains:
+//      - direct deps in current_deps[] and their source positions
+//      - transitive leaf sets approximated by initial_regs + initial_mem
+//        (these are the fixed points where dependency terminates)
+//      - per‑byte addresses touched by loads (local_bytes)
+//      - optional weak deps list (not populated yet in this version)
+//
+// At leak time, the analysis walks these snapshots from the two dependency
+// registers recorded in the leak, taking a transitive closure until reaching
+// the leaf sets (initial_mem), and emits memory addresses.
+// -----------------------------------------------------------------------------
+
 struct Leak;
 
-
+// X0..X31, F0..F31, tracked CSRs and PC 
 #define NBR_OF_ACTUAL_DEPENDENCIES 94
 
+// + ACCU + ACCU_PC
 #define NUMBER_OF_DEPENDENCIES (NBR_OF_ACTUAL_DEPENDENCIES + 2)
 
 #define NUMBER_OF_GENERAL_PURPOSE_REGISTERS 32
 
+// RS1, RS2, RS3, PC
 #define CURRENT_DEPENDENCIES_SIZE 4
 
+// RS1..RS3, PC, IMM, BYTE1..8
 #define CURRENT_DEPENDENCY_POSITION_SIZE 13
 
 #define OFFSET_TO_FREGS NUMBER_OF_GENERAL_PURPOSE_REGISTERS
@@ -43,11 +67,12 @@ struct Leak;
 
 #define END_CSRS (OFFSET_TO_CSRS + NUMBER_OF_TRACKED_CSRS)
 
+// Indices used in dep_pos for meta positions (e.g., where PC contributed)
 enum META_MAPPING {
     PC_DEP = 4, PC_CTRL_FLOW = 5, CSR_POS1 = 6, CSR_POS_TARGET = 7
 };
 
-/* The following block's mapping needs to be numerically contiguous. */
+// Slots inside current_deps[]
 enum CURRENT_DEPENDENCIES_INDEX {
     RS1_INDEX =  0, 
     RS2_INDEX =  1, 
@@ -55,6 +80,7 @@ enum CURRENT_DEPENDENCIES_INDEX {
     PC_INDEX  =  3,
 };
 
+// Slots inside dep_pos[] — position of source within the instruction encoding
 enum CURRENT_POSITION_INDEX {
     IMM_INDEX =    4, /* Immediate or shiftamount, if applicable. */
     /* The following block's mapping needs to be numerically contiguous! */
@@ -78,7 +104,7 @@ enum INIT_STATE {
     ADD = 1
 };
 
-// enum Target {
+// Architectural targets we can depend on.
 enum class Target : uint16_t {
     PC = 93, ACCU = 94, ACCU_PC = 95, MEM = 96, NONE = 97, IMM = 98, REMAINING_MEM = 99,
     PMPADDR6 = 91, PMPADDR7 = 92,
@@ -103,6 +129,7 @@ enum class Target : uint16_t {
 inline uint64_t to_i(Target t){ return static_cast<uint64_t>(t); }
 inline Target   to_T(uint64_t v){ return static_cast<Target>(v); }
 
+// A precise location where a source contributed to a target
 struct prog_position {
   uint64_t instr{};
   uint64_t pc{};
@@ -113,30 +140,32 @@ struct prog_position {
   }
 };
 
+// data‑flow edge. Not yet populated in this version; the vector exists to make
+// it easy to extend later.
 struct weak_dependency {
   bool is_memory = false;
   std::array<uint64_t,8> mem_addrs{};
   Target reg = Target::NONE;
 
-  //no *next; use vector in snapshot
 };
 
+// Immutable snapshot of a target right after one instruction commits.
+// The chain is formed via `prev` to earlier states of the same target.
 struct snapshot {
-  Target name = Target::NONE;
-
-  uint64_t pc = 0;
+  Target name = Target::NONE;         // which target this snapshot belongs to
+  uint64_t pc = 0;                    // PC when it was produced
 
   // current deps: RS1, RS2, RS3, PC
   std::array<Target,CURRENT_DEPENDENCIES_SIZE> current_deps {Target::NONE, Target::NONE, Target::NONE, Target::NONE};
 
-  // dep positions: RS1..RS3, PC, IMM, BYTE1..8
+  // Position metadata for each strong dep, plus IMM and BYTE1..8
   std::array<std::optional<prog_position>,CURRENT_DEPENDENCY_POSITION_SIZE> dep_pos{};
 
   // initial deps (registers 0..93)
   std::bitset<NBR_OF_ACTUAL_DEPENDENCIES> initial_regs{};
   std::vector<uint64_t> initial_mem;
 
-  // load-byte addresses
+  // For loads: which concrete byte addresses were read in this snapshot.
   std::array<std::optional<uint64_t>,8> local_bytes{};
 
   // weak deps
@@ -146,25 +175,23 @@ struct snapshot {
   std::shared_ptr<snapshot> prev;
 };
 
+// Per‑byte memory entry with a current snapshot 
 struct mem_entry {
   uint64_t addr{};
   std::shared_ptr<snapshot> cur; // current dependency snapshot for this byte
-
-  //no *next; done in Dep_tracker
 };
 
 class Dep_tracker {
 public:
   explicit Dep_tracker(reg_t initial_pc)
     : instr_(0), pc_(initial_pc) {
+    // Create a vault entry for each Target value.
     vault_.resize(NUMBER_OF_DEPENDENCIES);
     for (uint16_t i = 0; i < NUMBER_OF_DEPENDENCIES; ++i) {
       vault_[i] = std::make_unique<snapshot>();
       vault_[i]->name = to_T(i);
-      // initial target position exists for non-accu kinds in original code, but
-      // we don’t need it to understand deps;
+      // Initialize "self depends on itself" for all architectural state except PC.
       if (i != to_i(Target::ACCU) && i != to_i(Target::ACCU_PC)) {
-        // mark self-initial dependency except for PC
         if (i != to_i(Target::PC) && i < NBR_OF_ACTUAL_DEPENDENCIES)
           vault_[i]->initial_regs.set(i); //each reg depends on itself
       }
@@ -186,11 +213,14 @@ public:
                     uint64_t addr, uint8_t width,
                     uint8_t int_float_relation, INIT_STATE state);
 
-  // Commit current target (ACCU & ACCU_PC) into vault
+  // Finalize the current instruction: push accumulator(s) into the vault/memory
+  // and reset accumulators for the next instruction.
   bool commit_target();
 
+  // Advance to next instruction (updates pc and instruction counter).
   bool next_instruction(reg_t new_pc);
 
+  // Called at leak time: compute and write the required dependency addresses.
   void save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file);
 
 private:
@@ -209,6 +239,7 @@ private:
   static bool is_freg(Target t){ return to_i(t) >= 32 && to_i(t) < 64; }
   static bool is_csr (Target t){ return to_i(t) >= 64 && to_i(t) < 93; }
 
+  // Convert between int/fp register namespaces according to instruction bits.
   Target lift_to_fp(uint8_t ir_bits, Target t, bool is_target){
     if (t == Target::MEM || t == Target::PC || t == Target::IMM || t==Target::NONE) return t;
     bool need_fp = is_target ? (ir_bits & 0b10) : (ir_bits & 0b01);
@@ -224,9 +255,11 @@ private:
     if (it==vec.end() || it->instr!=p.instr || it->pos!=p.pos) vec.insert(it, p);
   }
 
+  // Accessors for the two accumulators
   snapshot* accu()    { return vault_[to_i(Target::ACCU)].get(); }
   snapshot* accu_pc() { return vault_[to_i(Target::ACCU_PC)].get(); }
 
+  // Find or create mem_entry for a byte address. New bytes are seeded from
   mem_entry& get_mem(uint64_t addr){ //build a new mem_entry object for the new addr and save its deps.
     auto it = mem_.find(addr);
     if (it != mem_.end()) return it->second;
@@ -235,13 +268,14 @@ private:
       if (ins) {
         it->second.cur = std::make_unique<snapshot>(*remaining_mem_);
         it->second.cur->initial_mem = {addr};
-        it->second.cur->weak_deps = remaining_mem_->weak_deps;
+        it->second.cur->weak_deps = remaining_mem_->weak_deps; // future use
         it->second.cur->name = Target::MEM;
       }
       return it->second;
     }
   }
 
+  // Copy leaf sets from src to dst (set union without duplicates for memory).
   void add_initials_from(const snapshot* src, snapshot* dst, INIT_STATE state){
     if (!src) return;
     if (state == INIT_STATE::OVERWRITE) {
@@ -258,6 +292,8 @@ private:
     }
   }
 
+  // Push the (non‑ACCU) accumulator into the corresponding vault/memory entry
+  // and reset the accumulator object for the next instruction.
   void commit_one_accu(snapshot* a){
     if (a->name==Target::ACCU || a->name==Target::ACCU_PC) return;
 
@@ -268,6 +304,8 @@ private:
     }
 
     if (a->name == Target::MEM) {
+      // STORE: duplicate the accumulator snapshot for each touched byte and
+      // link it into the byte's history.
       for (auto b : last_bytes_) {
         if (!b) break;
         std::unique_ptr<snapshot> ns = std::make_unique<snapshot>(*a);

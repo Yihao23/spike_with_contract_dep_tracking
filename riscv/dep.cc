@@ -1,27 +1,17 @@
 #include "dep.h"
 #include "leakage.h"
 
-//add each index as dep
-//add that index's previous deps
-//check imm
-// test current
-//debug
-//refine
-
-//add initials maybe is the only thing i need.
-//fix store
-//fix writing to file
+// TODO: populate and propagate weak dependencies 
 
 
 bool Dep_tracker::track_dependency(Target target, Target source,
                         uint16_t source_pos,
                         uint8_t int_float_relation,
                         bool csr_implicit, INIT_STATE state){
-  //pc_ = pc;
-  csr_impl_ = csr_implicit;
-  // target = lift_to_fp(int_float_relation, target, true);
-  // source = lift_to_fp(int_float_relation, source, false);
 
+  csr_impl_ = csr_implicit;
+
+  // Choose the active accumulator: PC has its own, everything else uses ACCU.
   auto* A = (target==Target::PC) ? accu_pc() : accu();
   // if (A->name != Target::ACCU && A->name != Target::ACCU_PC && A->name != target){
   //   return false; // two different targets in same accumulation
@@ -32,13 +22,10 @@ bool Dep_tracker::track_dependency(Target target, Target source,
   // build position
   prog_position p = cur_pos(source_pos);
 
+  // Trivial cases
   if (target == Target::NONE) {
     return true;
   }
-  //store
-  // if (target == Target::MEM) {
-  //   A->
-  // }
 
   if (source == Target::IMM) {
     A->dep_pos[IMM_INDEX] = p;
@@ -50,7 +37,7 @@ bool Dep_tracker::track_dependency(Target target, Target source,
     return false;
   }
 
-// purpose of dep pos and current deps ??????
+  // Place the source into the next free slot among RS1/RS2/RS3/PC.
   auto slot = (source == Target::PC) ? PC_INDEX
              : (A->current_deps[RS1_INDEX] == Target::NONE ? RS1_INDEX
              : (A->current_deps[RS2_INDEX] == Target::NONE ? RS2_INDEX
@@ -66,14 +53,16 @@ bool Dep_tracker::track_dependency(Target target, Target source,
   return true;
 }
 
+// Handle LOADs and STOREs.
 bool Dep_tracker::track_memory(Target target, Target source,
                                uint64_t addr, uint8_t width,
                                uint8_t ir,INIT_STATE state)
 {
   auto* A = accu();
-  A->name = target;
+  A->name = target; // for STORE this becomes Target::MEM; for LOAD it's the RD.
 
   // ---------- LOAD ----------
+  // LOAD: target <= MEM[addr..addr+width)
   if (source == Target::MEM) {
     for (uint8_t i = 0; i < width; i++) {
       auto& me = get_mem(addr + i);
@@ -85,17 +74,13 @@ bool Dep_tracker::track_memory(Target target, Target source,
   }
 
   // ---------- STORE ----------
+  // STORE: MEM[addr..addr+width) <= source
   if (target == Target::MEM) {
     for (uint8_t i = 0; i < width && i < 8; i++) {
-      last_bytes_[i] = &get_mem(addr + i);              
+      last_bytes_[i] = &get_mem(addr + i);       // commit_target will push A         
     }
     mem_used_ = true;
 
-    // if (!A->dep_pos[PC_INDEX].has_value()) {
-    //   A->current_deps[PC_INDEX] = Target::PC;
-    //   A->dep_pos[PC_INDEX]      = cur_pos(PC_DEP);       
-    //   add_initials_from(vault_[to_i(Target::PC)].get(), A,); 
-    // }
     if (!A->dep_pos[IMM_INDEX].has_value())
       A->dep_pos[IMM_INDEX] = cur_pos(IMM_INDEX);
 
@@ -127,7 +112,7 @@ bool Dep_tracker::track_memory(Target target, Target source,
   return true;
 }
 
-//
+// Finalize the instruction: push both accumulators.
 bool Dep_tracker::commit_target(){
   commit_one_accu(accu());
   commit_one_accu(accu_pc());
@@ -143,19 +128,11 @@ bool Dep_tracker::next_instruction(reg_t new_pc){
   return true;
 }
 
+// Walk the dependency graph for the leak and write unique addresses.
 void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file){
 
-  // std::bitset<NBR_OF_ACTUAL_DEPENDENCIES> need_reg; // X/F/CSR indices 0..93
-  // std::vector<uint64_t> need_mem;
-  // need_mem.reserve(256);
-
-  // auto add_mem_addr = [&](uint64_t a) {
-  //   if (std::find(need_mem.begin(), need_mem.end(), a) == need_mem.end())
-  //     need_mem.push_back(a);
-  // };
-
   for (auto start_idx: {cur_leak.dep_reg1, cur_leak.dep_reg2}) {
-    //cause most of the times dep reg2 is null.
+    //bc most of the times dep reg2 is null.
     if (start_idx == NULL) break; 
 
     snapshot* s = vault_[start_idx].get();
@@ -165,79 +142,14 @@ void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& de
 
     for (auto a : s->initial_mem) dep_file << a << "\n";
 
-
-    
-
-  //   std::vector<snapshot*> stack;
-  //   stack.reserve(128);
-  //   std::set<snapshot*> seen;
-
-  //   auto push = [&](snapshot* s) {
-  //     if (!s) return;
-  //     if (seen.insert(s).second)
-  //       stack.push_back(s);
-  //   };
-
-  //   push(vault_[start_idx].get());
-
-  //   while (!stack.empty()) {
-  //     snapshot* s = stack.back();
-  //     stack.pop_back();
-
-  //     //problem is here
-  //     // need_reg |= s->initial_regs;
-  //     // for (auto a : s->initial_mem) add_mem_addr(a);
-
-  //     for (auto t : s->current_deps) {
-  //       if (t == Target::NONE || t == Target::IMM || t == Target::MEM) continue;
-  //       uint64_t i = to_i(t);
-  //       if (i < vault_.size() && vault_[i]) push(vault_[i].get());
-  //     }
-      
-  //     //and here
-  //     //if having mem dependency
-  //     for (const auto& dep_mem : s->local_bytes) {
-  //       if (!dep_mem) continue;                      
-  //       auto it = mem_.find(*dep_mem);
-  //       if (it != mem_.end()){
-  //         if (it->second.cur->name != Target::NONE)
-  //           push(it->second.cur.get());
-  //         else 
-  //           add_mem_addr(it->first);
-  //           for (auto a : it->second.cur->initial_mem) add_mem_addr(a);
-  //           // dep_file<< "here\n";
-
-  //       }
-  //     }
-
-  //     //I think not necessary
-  //     // if (s->prev) push(s->prev.get());
-  //   }
-
-  //   // dep_file << "Xregs:\n";
-  //   // for (uint16_t i = 0; i < OFFSET_TO_FREGS; ++i)
-  //   //   if (need_reg.test(i)) dep_file << "R" << i << "\n";
-
-  //   // dep_file << "Fregs:\n";
-  //   // for (uint16_t i = OFFSET_TO_FREGS; i < OFFSET_TO_CSRS; ++i)
-  //   //   if (need_reg.test(i)) dep_file << "F" << (i - OFFSET_TO_FREGS) << "\n";
-
-  //   // dep_file << "CSRs:\n";
-  //   // for (uint16_t i = OFFSET_TO_CSRS; i < NBR_OF_ACTUAL_DEPENDENCIES; ++i)
-  //   //   if (need_reg.test(i)) dep_file << (i - OFFSET_TO_CSRS) << "\n";
-
-  //   std::sort(need_mem.begin(), need_mem.end());
-  //   // dep_file << "Memory:\n";
-  //   for (auto a : need_mem) dep_file << a << "\n";
   }
 }
 
 
 
-
+// Maps an instruction to calls into the tracker.
 void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p, std::ostream& dep_file)
 {
-  // dep_file<< "inst args:"<< "pc="<< pc <<", rs1="<< insn.rs1() <<", rs2="<< insn.rs2() <<", rd="<< insn.rd() <<"\n";
   // for now we don't support fp regs. Later we should lift_to_fp first.
   Target rs1 = to_T(insn.rs1());
   Target rs2 = to_T(insn.rs2());
@@ -261,10 +173,6 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
     /*arth- imm*/
     case 0b0010011:
     {
-      // dep_file<< "arth-imm\n";
-      // dep_file<<"imm="<< insn.i_imm() <<"\n";
-        // Target rs1 = to_T(insn.rs1());
-        // Target rd  = to_T(insn.rd());
         if (insn.rd() != 0) {
           dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
           dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
@@ -276,11 +184,6 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
     /*load*/
     case 0b0000011:
     {
-      // dep_file<< "load\n";
-      // dep_file<<"imm="<< insn.i_imm() <<"\n";
-      // dep_file<<"rs1_val="<< RS1 <<"\n";
-        // Target rs1 = to_T(insn.rs1());
-        // Target rd  = to_T(insn.rd());
         uint64_t width = 1 << ((insn.funct3() & 0b11) ); // 0=byte,1=half,2=word,3=double
         if (insn.funct3() == 0b100) width = 1; // LBU
         if (insn.funct3() == 0b101) width = 2; // LHU
@@ -296,9 +199,6 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
     /*store*/
     case 0b0100011:
     {
-      // dep_file<< "store\n";
-      // dep_file<<"imm="<< insn.s_imm() <<"\n";
-      // dep_file<<"rs1_val="<< RS1 <<"\n";
         uint64_t width = 1 << ((insn.funct3() & 0b11) ); // 0=byte,1=half,2=word,3=double
         if (insn.funct3() == 0b100) width = 1; // SB
         if (insn.funct3() == 0b101) width = 2; // SH
@@ -313,7 +213,6 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
     /*jal*/
     case 0b1111111:
     {
-      // dep_file<< "jal\n";
       // dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
@@ -322,8 +221,6 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
     /*jalr*/  
     case 0b1110111:
     {
-      // dep_file<< "jalr\n";
-      // Target rs1 = to_T(insn.rs1());
       // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
       dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
       dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false, INIT_STATE::ADD);
@@ -332,7 +229,6 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
     /*branch*/
     case 0b1100011:
     {
-      // dep_file<< "branch\n";
         // Target rs1 = to_T(insn.rs1());
         // Target rs2 = to_T(insn.rs2());
         dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
