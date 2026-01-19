@@ -163,8 +163,12 @@ inline void processor_t::update_histogram(reg_t pc)
 // the processor_t::step() loop. The logged variant is used in the slow path
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker, Leakage &leakages) //M:: execute instruction and update pc{
 {
-  add_dependency(dep_tracker, pc, fetch.insn, p, dep_out);
-  add_leakage(leakages, pc, fetch.insn, fetch.func, p);
+  printf("Executing instruction at pc: 0x%lx\n", pc);
+  if (pc >= 0x10110000 && pc <= 0x10110030) {
+    printf("dep tracking range\n");
+    add_dependency(dep_tracker, pc, fetch.insn, p, dep_out);
+    add_leakage(leakages, pc, fetch.insn, fetch.func, p);
+  }
   return fetch.func(p, fetch.insn, pc);
 }
 static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker, Leakage &leakages) //M:: execute instruction and update pc
@@ -281,7 +285,8 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         while (instret < n)
         {
          
-          leakages.delete_all_leaks();
+          // Clear leaks collected from the previous instruction.
+          //leakages.delete_leak();
           // Dep_tracker dep_tracker(pc);
           // init_leaks(&leakage);
           if (unlikely(!state.serialized && state.single_step == state.STEP_STEPPED)) {
@@ -316,7 +321,9 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
             disasm(fetch.insn);
           pc = execute_insn_logged(this, pc, fetch, dep_tracker,leakages); //M:: inside this
           advance_pc();
-          dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
+          // Some instructions may not produce any leak entries; avoid back() on empty.
+          if (leakages.size() != 0)
+            dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
           dep_tracker.next_instruction(pc);
 
           // Resume from debug mode in critical error
@@ -335,10 +342,14 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
       else while (instret < n)
       {
         // Main simulation loop, fast path.
-        leakages.delete_all_leaks();
+        // Clear leaks collected from the previous instruction.
+        //leakages.delete_leak();
         // Dep_tracker dep_tracker1(pc);
         // dep_tracker.next_instruction(pc);
         // init_leaks(&leakage);
+        printf("pc: 0x%lx\n", pc);
+        printf("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
+        auto old_leak_size = leakages.size();
         for (auto ic_entry = _mmu->access_icache(pc); ; ) {
           auto fetch = ic_entry->data;
           pc = execute_insn_fast(this, pc, fetch, dep_tracker,leakages); //M:: inside this
@@ -351,9 +362,12 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
           state.pc = pc;
         }
         advance_pc();
-        dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
+        // Some instructions may not produce any leak entries; avoid back() on empty.
+        if (leakages.size() > old_leak_size)
+          dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
         dep_tracker.next_instruction(pc);
-        // leakages.delete_all_leaks();
+      printf("~~~~~~~~~~~~~~~~~~~~~~~~~!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+        //leakages.delete_leak();
       }
     }
     catch(trap_t& t) //M:: excp
@@ -409,5 +423,6 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
 
   }
   leakages.print_leaks(leak_out);
-  leakages.delete_all_leaks();
+  //leakages.delete_all_leaks();// todo it is not real delete, the fuction just checks if empty
+  leakages.delete_leak();// todo it is not real delete, the fuction just checks if empty
 }

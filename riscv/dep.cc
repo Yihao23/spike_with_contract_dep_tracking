@@ -129,7 +129,7 @@ bool Dep_tracker::next_instruction(reg_t new_pc){
 }
 
 // Walk the dependency graph for the leak and write unique addresses.
-void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file){
+void Dep_tracker::save_req_dependencies_on_file(const Leak &cur_leak, std::ostream& dep_file){
 
   for (auto start_idx: {cur_leak.dep_reg1, cur_leak.dep_reg2}) {
     //bc most of the times dep reg2 is null.
@@ -140,8 +140,20 @@ void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& de
     // for (uint16_t i = 0; i < OFFSET_TO_FREGS; ++i)
     //   if (s->initial_regs.test(i)) dep_file << "R" << i << "\n";
 
-    for (auto a : s->initial_mem) dep_file << a << "\n";
-
+    //TODO:print dep regs according to dep_pos
+    for (size_t i = 0; i < NBR_OF_ACTUAL_DEPENDENCIES; i++) {
+      if (s->initial_regs.test(i)) {
+        dep_file << "R" << i << "\n";
+      }
+    }
+    for (auto a : s->initial_mem) dep_file << "0x" << std::hex << a << std::dec << "\n";
+  }
+  if(getenv("SPIKE_DEP_RAW")){
+    dep_file << "# Leak value: 0x" << std::hex << cur_leak.value << std::dec << "\n";
+    dep_file << "# Leak location: " << cur_leak.loc << "\n";
+    dep_file << "# Dep reg1: " << cur_leak.dep_reg1 << "\n";
+    dep_file << "# Dep reg2: " << cur_leak.dep_reg2 << "\n";
+    dep_file << "--------------------------\n"; 
   }
 }
 

@@ -1,0 +1,107 @@
+R5
+# Leak value: 0x10110000
+# Leak location: ADDI
+# Dep reg1: 5
+# Dep reg2: 0
+# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------
+R6
+# Leak value: 0x1011000c
+# Leak location: ADDI
+# Dep reg1: 6
+# Dep reg2: 0
+# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------
+R6
+0x10110048
+0x10110049
+0x1011004a
+0x1011004b
+0x1011004c
+0x1011004d
+0x1011004e
+0x1011004f
+# Leak value: 0x7
+# Leak location: DIVU
+# Dep reg1: 0
+# Dep reg2: 11
+# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------
+R5
+R6
+0x10110040
+0x10110041
+0x10110042
+0x10110043
+0x10110044
+0x10110045
+0x10110046
+0x10110047
+0x10110048
+0x10110049
+0x1011004a
+0x1011004b
+0x1011004c
+0x1011004d
+0x1011004e
+0x1011004f
+# Leak value: 0xe
+# Leak location: DIV
+# Dep reg1: 0
+# Dep reg2: 12
+# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------
+R5
+R6
+0x10110040
+0x10110041
+0x10110042
+0x10110043
+0x10110044
+0x10110045
+0x10110046
+0x10110047
+0x10110048
+0x10110049
+0x1011004a
+0x1011004b
+0x1011004c
+0x1011004d
+0x1011004e
+0x1011004f
+# Leak value: 0x7
+# Leak location: REM
+# Dep reg1: 0
+# Dep reg2: 13
+# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------
+R5
+R6
+R15
+0x10110040
+0x10110041
+0x10110042
+0x10110043
+0x10110044
+0x10110045
+0x10110046
+0x10110047
+0x10110048
+0x10110049
+0x1011004a
+0x1011004b
+0x1011004c
+0x1011004d
+0x1011004e
+0x1011004f
+# Leak value: 0x0
+# Leak location: REMU
+# Dep reg1: 0
+# Dep reg2: 14
+# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------
+R7
+# Leak value: 0x10110028
+# Leak location: ADDI
+# Dep reg1: 7
+# Dep reg2: 0
+# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------
+# Leak value: 0x0
+# Leak location: ADDI
+# Dep reg1: 0
+# Dep reg2: 0
+# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------

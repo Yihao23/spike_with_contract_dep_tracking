@@ -42,8 +42,8 @@ public:
     std::size_t size() const noexcept { return leaks_.size(); }
     bool delete_all_leaks() const noexcept { return leaks_.empty(); }
 
-    std::deque<Leak> leaks() const noexcept { return leaks_; }
-    // const std::deque<Leak>& leaks() const noexcept { return leaks_; }
+    //std::deque<Leak> leaks() const noexcept { return leaks_; }
+    const std::deque<Leak>& leaks() const noexcept { return leaks_; }
 
 private:
     std::deque<Leak> leaks_; 

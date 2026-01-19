@@ -1,0 +1,9 @@
+Leakage:
+  Leak: ADDI 0X10110000
+  Leak: ADDI 0X1011000C
+  Leak: DIVU 0X7
+  Leak: DIV 0XE
+  Leak: REM 0X7
+  Leak: REMU 0
+  Leak: ADDI 0X10110028
+  Leak: ADDI 0
