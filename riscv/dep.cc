@@ -189,7 +189,7 @@ bool Dep_tracker::next_instruction(reg_t new_pc){
 }
 
 // Walk the dependency graph for the leak and write unique addresses.
-void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file){
+void Dep_tracker::save_req_dependencies_on_file(const Leak &cur_leak, std::ostream& dep_file){
 
   for (auto start_idx: {cur_leak.dep_reg1, cur_leak.dep_reg2}) {
     //bc most of the times dep reg2 is null.
@@ -218,7 +218,7 @@ void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& de
     dep_file << "# Leak location: " << cur_leak.loc << "\n";
     dep_file << "# Dep reg1: " << cur_leak.dep_reg1 << "\n";
     dep_file << "# Dep reg2: " << cur_leak.dep_reg2 << "\n";
-    dep_file << "--------------------------\n"; 
+    dep_file << "# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------\n"; 
   }
 }
 

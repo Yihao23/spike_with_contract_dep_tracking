@@ -10,21 +10,42 @@
 #include <unordered_map>
 std::unordered_map <std::string, std::string> contract_templete = {
     {"ADDI", "REG_RS1"},
-    {"DIVU", "REG_RS2"}
+    {"DIVU", "REG_RS2"},
+    {"DIV", "REG_RS2"},
+    {"REM", "REG_RS2"},
+    {"REMU", "REG_RS2"},
 };
 
 
-void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, processor_t *p)
+void add_leakage(Leakage &leaks, reg_t , insn_t insn, insn_func_t func, processor_t *p)
 {
-    leaks.add_leak("PC", npc);
+    //leaks.add_leak("PC", npc);
     
-    if (insn.opcode() == 0b0010011 ) //addi
+    if (contract_templete.find("ADDI") != contract_templete.end() \
+    && insn.opcode() == 0b0010011 ) //addi
         leaks.add_leak("ADDI",RS1,insn.rs1());
         //also adding memory addr's dependency in dep_tracker
 
-    if(insn.opcode() == 0b0110011 && (insn.funct3() == 0b101) && (insn.funct7() == 0b0000001)) //divu
+    if(contract_templete.find("DIVU") != contract_templete.end() \
+    && insn.opcode() == 0b0110011 && (insn.funct3() == 0b101) \
+    && (insn.funct7() == 0b0000001)) //divu
         leaks.add_leak("DIVU",RS2, 0, insn.rs2());
- 
+
+    if(contract_templete.find("DIV") != contract_templete.end() \
+    && insn.opcode() == 0b0110011 && (insn.funct3() == 0b100) \
+    && (insn.funct7() == 0b0000001)) //div
+        leaks.add_leak("DIV",RS2, 0, insn.rs2());
+
+    if(contract_templete.find("REM") != contract_templete.end() \
+    && insn.opcode() == 0b0110011 && (insn.funct3() == 0b110) \
+    && (insn.funct7() == 0b0000001)) //rem
+        leaks.add_leak("REM",RS2, 0, insn.rs2());
+
+    if(contract_templete.find("REMU") != contract_templete.end() \
+    && insn.opcode() == 0b0110011 && (insn.funct3() == 0b111) \
+    && (insn.funct7() == 0b0000001)) //remu
+        leaks.add_leak("REMU",RS2, 0, insn.rs2());
+
 }
 
 // void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, processor_t *p)

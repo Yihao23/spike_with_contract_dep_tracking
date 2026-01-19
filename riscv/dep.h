@@ -221,7 +221,7 @@ public:
   bool next_instruction(reg_t new_pc);
 
   // Called at leak time: compute and write the required dependency addresses.
-  void save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file);
+  void save_req_dependencies_on_file(const Leak &cur_leak, std::ostream& dep_file);
 
 private:
 
