@@ -1,0 +1,24 @@
+* 2be0ff76 (HEAD -> ctr_in_spike, origin/ctr_in_spike) Comments for more clarity
+* 74ef6333 .
+* e1f88b06 ,
+* 58a48758 ,
+* 4fc0373c revert
+* 3e325aad all deps are now stored in initial ones.
+* 7345b5ae Update file dep.cc
+* 17df4457 changes
+* 9f3202c1 ongoing
+* 8c838e3b Log required regs for tracking
+* f72de654 implementing first defenitions
+* ab6461fb implementing first deps
+* 5b81cfb2 several modification for excp and leakage
+* 80f1a920 disabling termination of some exceptions
+* 4c54a7bf more excp
+* 17958411 modifying exception handling
+* 4ccecbc6 exception
+* da88228f disabling exception handling
+* 805d4b0d spike ready to use
+* cd2ec8dc fix
+* e2b3cc3f print ctrs
+* ada852c8 adding contracts
+* ecb112b1 add parsing arguments for leakage
+* 690a22ac some hint comments

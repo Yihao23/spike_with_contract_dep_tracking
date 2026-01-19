@@ -8,3 +8,6 @@ autom4te.cache/
 .#*
 *~
 config.log
+.tools/
+test_ctr_in_spike/*.elf
+test_ctr_in_spike/*.out

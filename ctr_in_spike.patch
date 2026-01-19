@@ -1,0 +1,2769 @@
+diff --git a/README.md b/README.md
+index 83d4503e..d857cc01 100644
+--- a/README.md
++++ b/README.md
+@@ -30,7 +30,6 @@ Spike supports the following RISC-V ISA features:
+   - Zbc extension, v1.0
+   - Zbs extension, v1.0
+   - Zfh and Zfhmin half-precision floating-point extensions, v1.0
+-  - Zfa extension, v1.0
+   - Zfinx extension, v1.0
+   - Zmmul integer multiplication extension, v1.0
+   - Zicbom, Zicbop, Zicboz cache-block maintenance extensions, v1.0
+diff --git a/debug_rom/debug_rom.S b/debug_rom/debug_rom.S
+index 378c5683..2d361397 100755
+--- a/debug_rom/debug_rom.S
++++ b/debug_rom/debug_rom.S
+@@ -7,19 +7,6 @@
+         .global entry
+         .global exception
+ 
+-// This macro handles mem access with proper management of the MPRVEN
+-// Usage: MEMORY_ACCESS_WITH_MPRV(<your code>)
+-#define MEMORY_ACCESS_WITH_MPRV(...)       \
+-       csrrci s0, CSR_DCSR, DCSR_MPRVEN;   \
+-       andi   s0, s0, DCSR_MPRVEN;         \
+-       bnez   s0, 1f;                      \
+-       __VA_ARGS__;                        \
+-       j      2f;                          \
+-1:                                         \
+-       __VA_ARGS__;                        \
+-       csrrsi zero, CSR_DCSR, DCSR_MPRVEN; \
+-2:
+-
+         // Entry location on ebreak, Halt, or Breakpoint
+         // It is the same for all harts. They branch when 
+         // their GO or RESUME bit is set.
+@@ -43,22 +30,13 @@ _entry:
+         // We keep checking both whether there is something the debugger wants
+         // us to do, or whether we should resume.
+ entry_loop:
+-        // 1 byte flag per hart. Only one hart advances here.
+-        MEMORY_ACCESS_WITH_MPRV(
+-          csrr s0, CSR_MHARTID;
+-          sw   s0, DEBUG_ROM_HALTED(zero);
+-          lbu  s0, DEBUG_ROM_FLAGS(s0);
+-        )
+-
++        csrr s0, CSR_MHARTID
++        sw   s0, DEBUG_ROM_HALTED(zero)
++        lbu  s0, DEBUG_ROM_FLAGS(s0) // 1 byte flag per hart. Only one hart advances here.
+         andi s0, s0, (1 << DEBUG_ROM_FLAG_GO)
+         bnez s0, going
+-
+-        // multiple harts can resume  here
+-        MEMORY_ACCESS_WITH_MPRV(
+-          csrr s0, CSR_MHARTID; 
+-          lbu  s0, DEBUG_ROM_FLAGS(s0);
+-        )
+-
++        csrr s0, CSR_MHARTID
++        lbu  s0, DEBUG_ROM_FLAGS(s0) // multiple harts can resume  here
+         andi s0, s0, (1 << DEBUG_ROM_FLAG_RESUME)
+         bnez s0, _resume
+         wfi
+@@ -68,23 +46,13 @@ _exception:
+         // Restore S0, which we always save to dscratch.
+         // We need this in case the user tried an abstract write to a
+         // non-existent CSR.
+-
+-
+-        // Let debug module know you got an exception.
+-        MEMORY_ACCESS_WITH_MPRV(
+-          csrr s0, CSR_DSCRATCH0; 
+-          sw zero, DEBUG_ROM_EXCEPTION(zero);
+-        )
+-
++        csrr    s0, CSR_DSCRATCH0
++        sw      zero, DEBUG_ROM_EXCEPTION(zero) // Let debug module know you got an exception.
+         ebreak
+ 
+ going:
+-        // When debug module sees this write, the GO flag is reset.
+-        MEMORY_ACCESS_WITH_MPRV(
+-          csrr s0, CSR_MHARTID; 
+-          sw s0, DEBUG_ROM_GOING(zero);
+-        )
+-
++        csrr s0, CSR_MHARTID
++        sw s0, DEBUG_ROM_GOING(zero)     // When debug module sees this write, the GO flag is reset.
+         csrr s0, CSR_DSCRATCH0            // Restore s0 here
+         fence
+         fence.i
+@@ -93,12 +61,8 @@ going:
+                                          // because jalr is special there)
+ 
+ _resume:
+-        // When Debug Module sees this write, the RESUME flag is reset.
+-        MEMORY_ACCESS_WITH_MPRV(
+-          csrr s0, CSR_MHARTID; 
+-          sw   s0, DEBUG_ROM_RESUMING(zero);
+-        )
+-
++        csrr s0, CSR_MHARTID
++        sw   s0, DEBUG_ROM_RESUMING(zero) // When Debug Module sees this write, the RESUME flag is reset.
+         csrr s0, CSR_DSCRATCH0   // Restore s0
+         dret
+ 
+diff --git a/debug_rom/debug_rom.h b/debug_rom/debug_rom.h
+index d3d89a28..7edd5f68 100644
+--- a/debug_rom/debug_rom.h
++++ b/debug_rom/debug_rom.h
+@@ -1,25 +1,13 @@
+ static const unsigned char debug_rom_raw[] = {
+-  0x6f, 0x00, 0xc0, 0x00, 0x6f, 0x00, 0x40, 0x0d, 0x6f, 0x00, 0x40, 0x07,
+-  0x0f, 0x00, 0xf0, 0x0f, 0x73, 0x10, 0x24, 0x7b, 0x73, 0x74, 0x08, 0x7b,
+-  0x13, 0x74, 0x04, 0x01, 0x63, 0x1a, 0x04, 0x00, 0x73, 0x24, 0x40, 0xf1,
+-  0x23, 0x20, 0x80, 0x10, 0x03, 0x44, 0x04, 0x40, 0x6f, 0x00, 0x40, 0x01,
+-  0x73, 0x24, 0x40, 0xf1, 0x23, 0x20, 0x80, 0x10, 0x03, 0x44, 0x04, 0x40,
+-  0x73, 0x60, 0x08, 0x7b, 0x13, 0x74, 0x14, 0x00, 0x63, 0x10, 0x04, 0x06,
+-  0x73, 0x74, 0x08, 0x7b, 0x13, 0x74, 0x04, 0x01, 0x63, 0x18, 0x04, 0x00,
+-  0x73, 0x24, 0x40, 0xf1, 0x03, 0x44, 0x04, 0x40, 0x6f, 0x00, 0x00, 0x01,
+-  0x73, 0x24, 0x40, 0xf1, 0x03, 0x44, 0x04, 0x40, 0x73, 0x60, 0x08, 0x7b,
+-  0x13, 0x74, 0x24, 0x00, 0x63, 0x14, 0x04, 0x06, 0x73, 0x00, 0x50, 0x10,
+-  0x6f, 0xf0, 0xdf, 0xf9, 0x73, 0x74, 0x08, 0x7b, 0x13, 0x74, 0x04, 0x01,
+-  0x63, 0x18, 0x04, 0x00, 0x73, 0x24, 0x20, 0x7b, 0x23, 0x26, 0x00, 0x10,
+-  0x6f, 0x00, 0x00, 0x01, 0x73, 0x24, 0x20, 0x7b, 0x23, 0x26, 0x00, 0x10,
+-  0x73, 0x60, 0x08, 0x7b, 0x73, 0x00, 0x10, 0x00, 0x73, 0x74, 0x08, 0x7b,
+-  0x13, 0x74, 0x04, 0x01, 0x63, 0x18, 0x04, 0x00, 0x73, 0x24, 0x40, 0xf1,
+-  0x23, 0x22, 0x80, 0x10, 0x6f, 0x00, 0x00, 0x01, 0x73, 0x24, 0x40, 0xf1,
+-  0x23, 0x22, 0x80, 0x10, 0x73, 0x60, 0x08, 0x7b, 0x73, 0x24, 0x20, 0x7b,
+-  0x0f, 0x00, 0xf0, 0x0f, 0x0f, 0x10, 0x00, 0x00, 0x67, 0x00, 0x00, 0x30,
+-  0x73, 0x74, 0x08, 0x7b, 0x13, 0x74, 0x04, 0x01, 0x63, 0x18, 0x04, 0x00,
+-  0x73, 0x24, 0x40, 0xf1, 0x23, 0x24, 0x80, 0x10, 0x6f, 0x00, 0x00, 0x01,
+-  0x73, 0x24, 0x40, 0xf1, 0x23, 0x24, 0x80, 0x10, 0x73, 0x60, 0x08, 0x7b,
++  0x6f, 0x00, 0xc0, 0x00, 0x6f, 0x00, 0x00, 0x06, 0x6f, 0x00, 0x80, 0x03,
++  0x0f, 0x00, 0xf0, 0x0f, 0x73, 0x10, 0x24, 0x7b, 0x73, 0x24, 0x40, 0xf1,
++  0x23, 0x20, 0x80, 0x10, 0x03, 0x44, 0x04, 0x40, 0x13, 0x74, 0x14, 0x00,
++  0x63, 0x14, 0x04, 0x02, 0x73, 0x24, 0x40, 0xf1, 0x03, 0x44, 0x04, 0x40,
++  0x13, 0x74, 0x24, 0x00, 0x63, 0x18, 0x04, 0x02, 0x73, 0x00, 0x50, 0x10,
++  0x6f, 0xf0, 0x9f, 0xfd, 0x73, 0x24, 0x20, 0x7b, 0x23, 0x26, 0x00, 0x10,
++  0x73, 0x00, 0x10, 0x00, 0x73, 0x24, 0x40, 0xf1, 0x23, 0x22, 0x80, 0x10,
++  0x73, 0x24, 0x20, 0x7b, 0x0f, 0x00, 0xf0, 0x0f, 0x0f, 0x10, 0x00, 0x00,
++  0x67, 0x00, 0x00, 0x30, 0x73, 0x24, 0x40, 0xf1, 0x23, 0x24, 0x80, 0x10,
+   0x73, 0x24, 0x20, 0x7b, 0x73, 0x00, 0x20, 0x7b
+ };
+-static const unsigned int debug_rom_raw_len = 260;
++static const unsigned int debug_rom_raw_len = 116;
+diff --git a/disasm/disasm.cc b/disasm/disasm.cc
+index 49f27943..349f1fdd 100644
+--- a/disasm/disasm.cc
++++ b/disasm/disasm.cc
+@@ -242,7 +242,7 @@ struct : public arg_t {
+     s += std::to_string(abs(target));
+     return s;
+   }
+-} branch_target;
++} branch_target; //M:: 
+ 
+ struct : public arg_t {
+   std::string to_string(insn_t insn) const {
+@@ -252,25 +252,25 @@ struct : public arg_t {
+     s << "pc " << sign << std::hex << " 0x" << abs(target);
+     return s.str();
+   }
+-} jump_target;
++} jump_target; //M:: 
+ 
+ struct : public arg_t {
+   std::string to_string(insn_t insn) const {
+     return xpr_name[insn.rvc_rs1()];
+   }
+-} rvc_rs1;
++} rvc_rs1; //M:: 
+ 
+ struct : public arg_t {
+   std::string to_string(insn_t insn) const {
+     return xpr_name[insn.rvc_rs2()];
+   }
+-} rvc_rs2;
++} rvc_rs2; //M:: 
+ 
+ struct : public arg_t {
+   std::string to_string(insn_t insn) const {
+     return fpr_name[insn.rvc_rs2()];
+   }
+-} rvc_fp_rs2;
++} rvc_fp_rs2; //M:: 
+ 
+ struct : public arg_t {
+   std::string to_string(insn_t insn) const {
+@@ -2280,7 +2280,7 @@ const disasm_insn_t* disassembler_t::lookup(insn_t insn) const
+   return probe_once(insn, HASH_SIZE);
+ }
+ 
+-void NOINLINE disassembler_t::add_insn(disasm_insn_t* insn)
++void NOINLINE disassembler_t::add_insn(disasm_insn_t* insn) //M:: what is this chain of instructions
+ {
+   size_t idx =
+     (insn->get_mask() & MASK1) == MASK1 ? hash(insn->get_match(), MASK1) :
+diff --git a/disasm/isa_parser.cc b/disasm/isa_parser.cc
+index 5fe82808..24eb5f28 100644
+--- a/disasm/isa_parser.cc
++++ b/disasm/isa_parser.cc
+@@ -326,14 +326,6 @@ isa_parser_t::isa_parser_t(const char* str, const char *priv)
+       extension_table[EXT_ZVKSH] = true;
+     } else if (ext_str == "zvqdotq") {
+       extension_table[EXT_ZVQDOTQ] = true;
+-    } else if (ext_str == "zvqbdot8i") {
+-      extension_table[EXT_ZVQBDOT8I] = true;
+-    } else if (ext_str == "zvqbdot16i") {
+-      extension_table[EXT_ZVQBDOT16I] = true;
+-    } else if (ext_str == "zvfwbdot16bf") {
+-      extension_table[EXT_ZVFWBDOT16BF] = true;
+-    } else if (ext_str == "zvfbdot32f") {
+-      extension_table[EXT_ZVFBDOT32F] = true;
+     } else if (ext_str == "zvkt") {
+     } else if (ext_str == "sstc") {
+         extension_table[EXT_SSTC] = true;
+@@ -376,9 +368,6 @@ isa_parser_t::isa_parser_t(const char* str, const char *priv)
+         bad_isa_string(str, ("Invalid Zvl string: " + ext_str).c_str());
+       vlen = std::max(vlen, new_vlen);
+     } else if (ext_str.substr(0, 3) == "zve") {
+-      if (ext_str.size() != 6) {
+-	bad_isa_string(str, ("Invalid Zve string: " + ext_str).c_str());
+-      }
+       reg_t new_elen;
+       try {
+         new_elen = safe_stoul(ext_str.substr(3, ext_str.size() - 4));
+diff --git a/fesvr/byteorder.h b/fesvr/byteorder.h
+index 2147f963..9775700b 100644
+--- a/fesvr/byteorder.h
++++ b/fesvr/byteorder.h
+@@ -25,7 +25,7 @@ static inline int128_t swap(int128_t n) { return int128_t(swap(uint128_t(n))); }
+ static inline bool is_be() { return htonl(1) == 1; }
+ template<typename T> static inline T from_be(T n) { return is_be() ? n : swap(n); }
+ template<typename T> static inline T to_be(T n) { return from_be(n); }
+-template<typename T> static inline T from_le(T n) { return is_be() ? swap(n) : n; }
++template<typename T> static inline T from_le(T n) { return is_be() ? swap(n) : n; } //M:: from_le is the same as swap if target is big-endian
+ template<typename T> static inline T to_le(T n) { return from_le(n); }
+ 
+ // Wrapper to mark a value as target endian, to guide conversion code
+diff --git a/fesvr/htif.cc b/fesvr/htif.cc
+index 15f79bf5..4be59533 100644
+--- a/fesvr/htif.cc
++++ b/fesvr/htif.cc
+@@ -95,7 +95,7 @@ void htif_t::start()
+       reset();
+     } else {
+       auto empty_symbols = std::map<std::string, uint64_t>();
+-      load_symbols(empty_symbols);
++      load_symbols(empty_symbols); //M:: read symbols from empty ELF file
+     }
+   }
+ }
+@@ -257,7 +257,7 @@ void htif_t::clear_chunk(addr_t taddr, size_t len)
+     write_chunk(taddr + pos, std::min(len - pos, chunk_max_size()), &zeros[0]);
+ }
+ 
+-int htif_t::run()
++int htif_t::run() //M:: Run the HTIF main loop
+ {
+   start();
+ 
+@@ -268,7 +268,7 @@ int htif_t::run()
+ 
+   if (tohost_addr == 0) {
+     while (!should_exit())
+-      idle();
++      idle(); //M:: important point
+   }
+ 
+   while (!should_exit())
+diff --git a/riscv/abstract_device.h b/riscv/abstract_device.h
+index 41f5c3f1..d8ddbabe 100644
+--- a/riscv/abstract_device.h
++++ b/riscv/abstract_device.h
+@@ -46,11 +46,4 @@ mmio_device_map_t& mmio_device_map();
+   std::string generate_dts(const sim_t* sim, const std::vector<std::string>& sargs) const override { return generate(sim, sargs); } \
+   }; device_factory_t *name##_factory = new name##_factory_t();
+ 
+-#define REGISTER_BUILTIN_DEVICE(name, parse, generate) \
+-  class name##_factory_t : public device_factory_t { \
+-  public: \
+-  name##_t* parse_from_fdt(const void* fdt, const sim_t* sim, reg_t* base, const std::vector<std::string>& sargs) const override { return parse(fdt, sim, base, sargs); } \
+-  std::string generate_dts(const sim_t* sim, const std::vector<std::string>& sargs) const override { return generate(sim, sargs); } \
+-  }; device_factory_t *name##_factory = new name##_factory_t();
+-
+ #endif
+diff --git a/riscv/clint.cc b/riscv/clint.cc
+index e16ebddc..3d5c9841 100644
+--- a/riscv/clint.cc
++++ b/riscv/clint.cc
+@@ -145,4 +145,4 @@ std::string clint_generate_dts(const sim_t* sim, const std::vector<std::string>&
+   return s.str();
+ }
+ 
+-REGISTER_BUILTIN_DEVICE(clint, clint_parse_from_fdt, clint_generate_dts)
++REGISTER_DEVICE(clint, clint_parse_from_fdt, clint_generate_dts)
+diff --git a/riscv/csr_init.cc b/riscv/csr_init.cc
+index 24ff498d..0acd1c7f 100644
+--- a/riscv/csr_init.cc
++++ b/riscv/csr_init.cc
+@@ -430,17 +430,6 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
+     auto sireg = std::make_shared<sscsrind_reg_csr_t>(proc, CSR_SIREG, siselect);
+     add_ireg_proxy(proc, sireg);
+     add_supervisor_csr(CSR_SIREG, std::make_shared<virtualized_indirect_csr_t>(proc, sireg, vsireg));
+-    if (proc->extension_enabled(EXT_SSCCFG) || proc->extension_enabled(EXT_SMCDELEG)) {
+-      // case CSR_SIREG
+-      if (proc->extension_enabled_const(EXT_ZICNTR)) {
+-        sireg->add_ireg_proxy(SISELECT_SMCDELEG_START, mcycle);
+-        sireg->add_ireg_proxy(SISELECT_SMCDELEG_INSTRET, minstret);
+-      }
+-      if (proc->extension_enabled_const(EXT_ZIHPM)) {
+-        for (size_t j = 0; j < (SISELECT_SMCDELEG_END - SISELECT_SMCDELEG_HPMEVENT_3 + 1); j++)
+-          sireg->add_ireg_proxy(SISELECT_SMCDELEG_HPMCOUNTER_3 + j, csrmap[CSR_HPMCOUNTER3 + j]);
+-      }
+-    }
+ 
+     const reg_t vsireg_csrs[] = { CSR_VSIREG2, CSR_VSIREG3, CSR_VSIREG4, CSR_VSIREG5, CSR_VSIREG6 };
+     const reg_t sireg_csrs[] = { CSR_SIREG2, CSR_SIREG3, CSR_SIREG4, CSR_SIREG5, CSR_SIREG6 };
+@@ -454,6 +443,16 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
+       // Smcdeleg
+       if (proc->extension_enabled(EXT_SSCCFG) || proc->extension_enabled(EXT_SMCDELEG)) {
+         switch (sireg_csrs[i]) {
++          case CSR_SIREG:
++            if (proc->extension_enabled_const(EXT_ZICNTR)) {
++              sireg->add_ireg_proxy(SISELECT_SMCDELEG_START, mcycle);
++              sireg->add_ireg_proxy(SISELECT_SMCDELEG_INSTRET, minstret);
++            }
++            if (proc->extension_enabled_const(EXT_ZIHPM)) {
++              for (size_t j = 0; j < (SISELECT_SMCDELEG_END - SISELECT_SMCDELEG_HPMEVENT_3 + 1); j++)
++                sireg->add_ireg_proxy(SISELECT_SMCDELEG_HPMCOUNTER_3 + j, csrmap[CSR_HPMCOUNTER3 + j]);
++            }
++            break;
+           case CSR_SIREG4:
+           if (xlen == 32) {
+             if (proc->extension_enabled_const(EXT_ZICNTR)) {
+diff --git a/riscv/csrs.cc b/riscv/csrs.cc
+index 76f600dd..49717e55 100644
+--- a/riscv/csrs.cc
++++ b/riscv/csrs.cc
+@@ -121,7 +121,7 @@ bool pmpaddr_csr_t::unlogged_write(const reg_t val) noexcept {
+   const bool locked = !lock_bypass && (cfg & PMP_L);
+ 
+   if (pmpidx < proc->n_pmp && !locked && !next_locked_and_tor()) {
+-    this->val = val & ((reg_t(1) << (proc->paddr_bits() - PMP_SHIFT)) - 1);
++    this->val = val & ((reg_t(1) << (MAX_PADDR_BITS - PMP_SHIFT)) - 1);
+   }
+   else
+     return false;
+@@ -1098,7 +1098,7 @@ bool base_atp_csr_t::satp_valid(reg_t val) const noexcept {
+ }
+ 
+ reg_t base_atp_csr_t::compute_new_satp(reg_t val) const noexcept {
+-  reg_t rv64_ppn_mask = (reg_t(1) << (proc->paddr_bits() - PGSHIFT)) - 1;
++  reg_t rv64_ppn_mask = (reg_t(1) << (MAX_PADDR_BITS - PGSHIFT)) - 1;
+ 
+   reg_t mode_mask = proc->get_xlen() == 32 ? SATP32_MODE : SATP64_MODE;
+   reg_t asid_mask_if_enabled = proc->get_xlen() == 32 ? SATP32_ASID : SATP64_ASID;
+@@ -1326,7 +1326,7 @@ bool hgatp_csr_t::unlogged_write(const reg_t val) noexcept {
+         HGATP32_MODE |
+         (proc->supports_impl(IMPL_MMU_VMID) ? HGATP32_VMID : 0);
+   } else {
+-    mask = (HGATP64_PPN & ((reg_t(1) << (proc->paddr_bits() - PGSHIFT)) - 1)) |
++    mask = (HGATP64_PPN & ((reg_t(1) << (MAX_PADDR_BITS - PGSHIFT)) - 1)) |
+         (proc->supports_impl(IMPL_MMU_VMID) ? HGATP64_VMID : 0);
+ 
+     if (get_field(val, HGATP64_MODE) == HGATP_MODE_OFF ||
+@@ -1421,7 +1421,6 @@ dcsr_csr_t::dcsr_csr_t(processor_t* const proc, const reg_t addr):
+   ebreakvs(false),
+   ebreakvu(false),
+   v(false),
+-  mprven(false),
+   cause(0),
+   ext_cause(0),
+   cetrig(0),
+@@ -1451,7 +1450,6 @@ reg_t dcsr_csr_t::read() const noexcept {
+   result = set_field(result, DCSR_STEP, step);
+   result = set_field(result, DCSR_PRV, prv);
+   result = set_field(result, CSR_DCSR_V, v);
+-  result = set_field(result, DCSR_MPRVEN, mprven);
+   result = set_field(result, DCSR_PELP, pelp);
+   return result;
+ }
+@@ -1466,7 +1464,6 @@ bool dcsr_csr_t::unlogged_write(const reg_t val) noexcept {
+   ebreakvs = proc->extension_enabled('H') ? get_field(val, CSR_DCSR_EBREAKVS) : false;
+   ebreakvu = proc->extension_enabled('H') ? get_field(val, CSR_DCSR_EBREAKVU) : false;
+   v = proc->extension_enabled('H') ? get_field(val, CSR_DCSR_V) : false;
+-  mprven = get_field(val, CSR_DCSR_MPRVEN);
+   pelp = proc->extension_enabled(EXT_ZICFILP) ?
+          static_cast<elp_t>(get_field(val, DCSR_PELP)) : elp_t::NO_LP_EXPECTED;
+   cetrig = proc->extension_enabled(EXT_SMDBLTRP) ? get_field(val, DCSR_CETRIG) : false;
+diff --git a/riscv/csrs.h b/riscv/csrs.h
+index f076aaab..2f05ea2f 100644
+--- a/riscv/csrs.h
++++ b/riscv/csrs.h
+@@ -725,7 +725,6 @@ class dcsr_csr_t: public csr_t {
+   bool ebreakvs;
+   bool ebreakvu;
+   bool v;
+-  bool mprven;
+   uint8_t cause;
+   uint8_t ext_cause;
+   bool cetrig;
+@@ -974,7 +973,7 @@ class inaccessible_csr_t: public csr_t {
+   virtual void verify_permissions(insn_t insn, bool write) const override;
+   reg_t read() const noexcept override { return 0; }
+  protected:
+-  bool unlogged_write(const reg_t UNUSED val) noexcept override { return false; }
++  bool unlogged_write(const reg_t val) noexcept override { return false; }
+ };
+ 
+ class vstopi_csr_t: public csr_t {
+diff --git a/riscv/decode.h b/riscv/decode.h
+index 51ecbebc..02be0310 100644
+--- a/riscv/decode.h
++++ b/riscv/decode.h
+@@ -72,7 +72,7 @@ const int NCSR = 4096;
+ #define Sn(n) ((n) < 2 ? X_S0 + (n) : X_Sn + (n))
+ 
+ typedef uint64_t insn_bits_t;
+-class insn_t
++class insn_t //M:: in relation with decode_macros.h and insn_template.cc
+ {
+ public:
+   insn_t() = default;
+diff --git a/riscv/decode_macros.h b/riscv/decode_macros.h
+index 892515fa..07a3128c 100644
+--- a/riscv/decode_macros.h
++++ b/riscv/decode_macros.h
+@@ -10,7 +10,7 @@
+ #include "softfloat_types.h"
+ #include "specialize.h"
+ 
+-// helpful macros, etc
++// helpful macros, etc M:: use in inst.h and referred to methods in class insn_t
+ #define MMU (*p->get_mmu())
+ #define STATE (*p->get_state())
+ #define FLEN (p->get_flen())
+@@ -21,7 +21,7 @@
+ #define RS1 READ_REG(insn.rs1())
+ #define RS2 READ_REG(insn.rs2())
+ #define RS3 READ_REG(insn.rs3())
+-#define WRITE_RD(value) WRITE_REG(insn.rd(), value)
++#define WRITE_RD(value) WRITE_REG(insn.rd(), value) //M::
+ #define CHECK_RD() CHECK_REG(insn.rd())
+ 
+ /* 0 : int
+diff --git a/riscv/dep.cc b/riscv/dep.cc
+new file mode 100644
+index 00000000..2f3785b7
+--- /dev/null
++++ b/riscv/dep.cc
+@@ -0,0 +1,275 @@
++#include "dep.h"
++#include "leakage.h"
++
++// TODO: populate and propagate weak dependencies 
++
++
++bool Dep_tracker::track_dependency(Target target, Target source,
++                        uint16_t source_pos,
++                        uint8_t int_float_relation,
++                        bool csr_implicit, INIT_STATE state){
++
++  csr_impl_ = csr_implicit;
++
++  // Choose the active accumulator: PC has its own, everything else uses ACCU.
++  auto* A = (target==Target::PC) ? accu_pc() : accu();
++  // if (A->name != Target::ACCU && A->name != Target::ACCU_PC && A->name != target){
++  //   return false; // two different targets in same accumulation
++  //   std::cout<<"target prob\n";
++  // }
++  A->name = target;
++
++  // build position
++  prog_position p = cur_pos(source_pos);
++
++  // Trivial cases
++  if (target == Target::NONE) {
++    return true;
++  }
++
++  if (source == Target::IMM) {
++    A->dep_pos[IMM_INDEX] = p;
++    return true;
++  }
++
++  if (source == Target::MEM) {
++   // addr should be added by track mem for now
++    return false;
++  }
++
++  // Place the source into the next free slot among RS1/RS2/RS3/PC.
++  auto slot = (source == Target::PC) ? PC_INDEX
++             : (A->current_deps[RS1_INDEX] == Target::NONE ? RS1_INDEX
++             : (A->current_deps[RS2_INDEX] == Target::NONE ? RS2_INDEX
++             : (A->current_deps[RS3_INDEX] == Target::NONE ? RS3_INDEX : 0xFFFF)));
++
++  if (slot == 0xFFFF) return false;
++
++  A->current_deps[slot] = source;
++  A->dep_pos[slot] = p;
++
++  // propagate initial deps
++  add_initials_from(vault_[to_i(source)].get(), A, state); //save current deps of sources
++  return true;
++}
++
++// Handle LOADs and STOREs.
++bool Dep_tracker::track_memory(Target target, Target source,
++                               uint64_t addr, uint8_t width,
++                               uint8_t ir,INIT_STATE state)
++{
++  auto* A = accu();
++  A->name = target; // for STORE this becomes Target::MEM; for LOAD it's the RD.
++
++  // ---------- LOAD ----------
++  // LOAD: target <= MEM[addr..addr+width)
++  if (source == Target::MEM) {
++    for (uint8_t i = 0; i < width; i++) {
++      auto& me = get_mem(addr + i);
++      A->local_bytes[i] = me.addr;
++      add_initials_from(me.cur.get(), A, state); //add this addr itself and its deps if this addr used before              
++      A->dep_pos[BYTE1_INDEX + i] = cur_pos(BYTE1_INDEX + i);
++    }
++    return true;
++  }
++
++  // ---------- STORE ----------
++  // STORE: MEM[addr..addr+width) <= source
++  if (target == Target::MEM) {
++    for (uint8_t i = 0; i < width && i < 8; i++) {
++      last_bytes_[i] = &get_mem(addr + i);       // commit_target will push A         
++    }
++    mem_used_ = true;
++
++    if (!A->dep_pos[IMM_INDEX].has_value())
++      A->dep_pos[IMM_INDEX] = cur_pos(IMM_INDEX);
++
++    auto place = [&](Target s, uint16_t slot_idx) {
++      if (A->current_deps[slot_idx] == Target::NONE) {
++        A->current_deps[slot_idx] = s;
++        A->dep_pos[slot_idx] = cur_pos(slot_idx);   
++      }
++      add_initials_from(vault_[to_i(s)].get(), A, state);       
++    };
++
++    if (source != Target::MEM && source != Target::NONE) {
++      if (A->current_deps[RS1_INDEX] == Target::NONE) place(source, RS1_INDEX);
++      else if (A->current_deps[RS2_INDEX] == Target::NONE) place(source, RS2_INDEX);
++      else place(source, RS3_INDEX);
++    }
++
++    // weak_dependency w{};
++    // if (source != Target::MEM) { w.is_memory = false; w.reg = source; }
++    // else { w.is_memory = true; for (uint8_t i=0;i<width && i<8;i++) w.mem_addrs[i] = addr+i; }
++
++    // for (auto& kv : mem_) {
++    //   if (kv.first < addr || kv.first >= addr + width)    
++    //     kv.second.cur->weak_deps.push_back(w);
++    // }
++    // remaining_mem_->weak_deps.push_back(w);
++    return true;
++  }
++  return true;
++}
++
++// Finalize the instruction: push both accumulators.
++bool Dep_tracker::commit_target(){
++  commit_one_accu(accu());
++  commit_one_accu(accu_pc());
++  last_bytes_.fill(nullptr);
++  mem_used_ = false;
++  csr_impl_ = false;
++  return true;
++}
++
++bool Dep_tracker::next_instruction(reg_t new_pc){
++  pc_ = new_pc;
++  ++instr_;
++  return true;
++}
++
++// Walk the dependency graph for the leak and write unique addresses.
++void Dep_tracker::save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file){
++
++  for (auto start_idx: {cur_leak.dep_reg1, cur_leak.dep_reg2}) {
++    //bc most of the times dep reg2 is null.
++    if (start_idx == NULL) break; 
++
++    snapshot* s = vault_[start_idx].get();
++    
++    // for (uint16_t i = 0; i < OFFSET_TO_FREGS; ++i)
++    //   if (s->initial_regs.test(i)) dep_file << "R" << i << "\n";
++
++    for (auto a : s->initial_mem) dep_file << a << "\n";
++
++  }
++}
++
++
++
++// Maps an instruction to calls into the tracker.
++void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p, std::ostream& dep_file)
++{
++  // for now we don't support fp regs. Later we should lift_to_fp first.
++  Target rs1 = to_T(insn.rs1());
++  Target rs2 = to_T(insn.rs2());
++  Target rd  = to_T(insn.rd());
++
++  switch (insn.opcode()){
++
++    /*arth- reg*/
++    case 0b0110011:
++    {
++      // dep_file<< "arth-reg\n";
++      if (insn.rd() != 0) {
++        dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
++        dep_tracker.track_dependency(rd, rs2, RS2_INDEX, 0b11, false, INIT_STATE::ADD);
++        dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
++      }
++      // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
++      break;
++    }
++  
++    /*arth- imm*/
++    case 0b0010011:
++    {
++        if (insn.rd() != 0) {
++          dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
++          dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
++          dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
++        }
++        // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
++      break;
++    }
++    /*load*/
++    case 0b0000011:
++    {
++        uint64_t width = 1 << ((insn.funct3() & 0b11) ); // 0=byte,1=half,2=word,3=double
++        if (insn.funct3() == 0b100) width = 1; // LBU
++        if (insn.funct3() == 0b101) width = 2; // LHU
++        if (insn.funct3() == 0b110) width = 4; // LWU
++        if (insn.funct3() == 0b111) width = 8; // LDWU
++        dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
++        dep_tracker.track_memory(rd, Target::MEM, insn.i_imm()+RS1, width,0, INIT_STATE::ADD);
++        dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
++        dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
++      break;
++    }
++  
++    /*store*/
++    case 0b0100011:
++    {
++        uint64_t width = 1 << ((insn.funct3() & 0b11) ); // 0=byte,1=half,2=word,3=double
++        if (insn.funct3() == 0b100) width = 1; // SB
++        if (insn.funct3() == 0b101) width = 2; // SH
++        if (insn.funct3() == 0b110) width = 4; // SW
++        if (insn.funct3() == 0b111) width = 8; // SD
++        dep_tracker.track_memory(Target::MEM, rs1, insn.s_imm()+RS1, width,0, INIT_STATE::OVERWRITE);
++        dep_tracker.track_memory(Target::MEM, rs2, insn.s_imm()+RS2, width,0, INIT_STATE::ADD);
++        dep_tracker.track_memory(Target::MEM, Target::PC, PC_INDEX,width,0, INIT_STATE::ADD);
++        // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
++      break;
++    }
++    /*jal*/
++    case 0b1111111:
++    {
++      // dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
++      // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
++      dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
++      break;
++    }
++    /*jalr*/  
++    case 0b1110111:
++    {
++      // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
++      dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
++      dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false, INIT_STATE::ADD);
++      break;
++    }
++    /*branch*/
++    case 0b1100011:
++    {
++        // Target rs1 = to_T(insn.rs1());
++        // Target rs2 = to_T(insn.rs2());
++        dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
++        dep_tracker.track_dependency(Target::PC, rs2, RS2_INDEX, 0b11, false, INIT_STATE::ADD);
++
++        uint8_t taken=0;
++        if (insn.funct3() == 0b000){ //beq
++            if(RS1 == RS2) 
++                taken=1;
++        }
++        else if (insn.funct3() == 0b001){ //bne
++            if(RS1 != RS2) 
++                taken=1;
++        }
++        else if (insn.funct3() == 0b100){ //blt
++            if(sreg_t(RS1) < sreg_t(RS2))
++                taken=1;
++        }
++        else if (insn.funct3() == 0b101){ //bge
++            if(sreg_t(RS1) >= sreg_t(RS2)) 
++                taken=1;
++        }
++        else if (insn.funct3() == 0b110){ //bltu
++            if(RS1 < RS2)
++                taken=1;
++        }
++        else if (insn.funct3() == 0b111){ //bgeu
++            if(RS1 >= RS2) 
++                taken=1;
++        }
++        if (taken)
++          dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
++
++      break;
++    }
++
++    default:
++    {
++      break;
++    }
++  }
++  dep_tracker.commit_target();
++}
++
+diff --git a/riscv/dep.h b/riscv/dep.h
+new file mode 100644
+index 00000000..a69bb9a3
+--- /dev/null
++++ b/riscv/dep.h
+@@ -0,0 +1,334 @@
++#ifndef RISCV_DEP_H
++#define RISCV_DEP_H
++
++#include <array>
++#include <bitset>
++#include <cstdint>
++#include <string>
++#include <unordered_map>
++#include <vector>
++#include <optional>
++#include <limits.h>
++#include <ostream>
++#include <algorithm>
++#include <memory>
++#include "platform.h"
++#include "config.h"
++#include "processor.h"
++#include "mmu.h"
++#include "disasm.h"
++#include "decode_macros.h"
++// #include "leakage.h"
++
++//------------------------------------------------------
++// This module tracks data dependencies between architectural targets while Spike executes.
++// The core idea:
++//  * During the execution of a single instruction, we collect edges in an
++//    accumulator snapshot (ACCU or ACCU_PC).
++//  * When the instruction commits, we "push" that accumulator into the vault
++//    entry of the written target (reg/csr/pc) or the affected memory bytes.
++//  * Each vault entry is a linked list (via snapshot::prev) of snapshots over
++//    time, so you can traverse backwards to earlier versions.
++//  * A snapshot contains:
++//      - direct deps in current_deps[] and their source positions
++//      - transitive leaf sets approximated by initial_regs + initial_mem
++//        (these are the fixed points where dependency terminates)
++//      - per‑byte addresses touched by loads (local_bytes)
++//      - optional weak deps list (not populated yet in this version)
++//
++// At leak time, the analysis walks these snapshots from the two dependency
++// registers recorded in the leak, taking a transitive closure until reaching
++// the leaf sets (initial_mem), and emits memory addresses.
++// -----------------------------------------------------------------------------
++
++struct Leak;
++
++// X0..X31, F0..F31, tracked CSRs and PC 
++#define NBR_OF_ACTUAL_DEPENDENCIES 94
++
++// + ACCU + ACCU_PC
++#define NUMBER_OF_DEPENDENCIES (NBR_OF_ACTUAL_DEPENDENCIES + 2)
++
++#define NUMBER_OF_GENERAL_PURPOSE_REGISTERS 32
++
++// RS1, RS2, RS3, PC
++#define CURRENT_DEPENDENCIES_SIZE 4
++
++// RS1..RS3, PC, IMM, BYTE1..8
++#define CURRENT_DEPENDENCY_POSITION_SIZE 13
++
++#define OFFSET_TO_FREGS NUMBER_OF_GENERAL_PURPOSE_REGISTERS
++
++#define NUMBER_OF_FLOATING_POINT_REGISTERS 32
++
++#define OFFSET_TO_CSRS (OFFSET_TO_FREGS + NUMBER_OF_FLOATING_POINT_REGISTERS)
++
++#define NUMBER_OF_TRACKED_CSRS 29
++
++#define END_CSRS (OFFSET_TO_CSRS + NUMBER_OF_TRACKED_CSRS)
++
++// Indices used in dep_pos for meta positions (e.g., where PC contributed)
++enum META_MAPPING {
++    PC_DEP = 4, PC_CTRL_FLOW = 5, CSR_POS1 = 6, CSR_POS_TARGET = 7
++};
++
++// Slots inside current_deps[]
++enum CURRENT_DEPENDENCIES_INDEX {
++    RS1_INDEX =  0, 
++    RS2_INDEX =  1, 
++    RS3_INDEX =  2, 
++    PC_INDEX  =  3,
++};
++
++// Slots inside dep_pos[] — position of source within the instruction encoding
++enum CURRENT_POSITION_INDEX {
++    IMM_INDEX =    4, /* Immediate or shiftamount, if applicable. */
++    /* The following block's mapping needs to be numerically contiguous! */
++    BYTE1_INDEX =  5, /* Byte index for the BYTE, HALF, WORD & DOUBLE case. */
++    BYTE2_INDEX =  6, /* Byte index for the HALF, WORD & DOUBLE case. */
++    BYTE3_INDEX =  7, /* Byte index for the WORD & DOUBLE case. */
++    BYTE4_INDEX =  8, /* Byte index for the WORD & DOUBLE case. */
++    BYTE5_INDEX =  9, /* Byte index for the DOUBLE case. */
++    BYTE6_INDEX =  10, /* Byte index for the DOUBLE case. */
++    BYTE7_INDEX = 11, /* Byte index for the DOUBLE case. */
++    BYTE8_INDEX = 12  /* Byte index for the DOUBLE case. */
++    /* The previous block's mapping needs to be numerically contiguous! */
++};
++
++enum WORD_WIDTH {
++    BYTE = 1, HALF = 2, WORD = 4, DOUBLE = 8
++};
++
++enum INIT_STATE {
++    OVERWRITE = 0,
++    ADD = 1
++};
++
++// Architectural targets we can depend on.
++enum class Target : uint16_t {
++    PC = 93, ACCU = 94, ACCU_PC = 95, MEM = 96, NONE = 97, IMM = 98, REMAINING_MEM = 99,
++    PMPADDR6 = 91, PMPADDR7 = 92,
++    PMPADDR1 = 86, PMPADDR2 = 87, PMPADDR3 = 88, PMPADDR4 = 89, PMPADDR5 = 90,
++    MCAUSE = 81, MTVAL = 82, MIP = 83, PMPCFG0 = 84, PMPADDR0 = 85,
++    MSTATUS = 76, MEDELEG = 77, MIE = 78, MSCRATCH = 79, MEPC = 80,
++    SEPC = 70, SCAUSE = 71, STVAL = 72, SIP = 73, SATP = 74, MHARTID = 75,
++    FFLAGS = 64, FRM = 65, FCSR = 66, SSTATUS = 67, SIE = 68, SSCRATCH = 69, 
++    F31 = 63, F30 = 62, F29 = 61,
++    F28 = 60, F27 = 59, F26 = 58, F25 = 57, F24 = 56, F23 = 55, F22 = 54,
++    F21 = 53, F20 = 52, F19 = 51, F18 = 50, F17 = 49, F16 = 48, F15 = 47,
++    F14 = 46, F13 = 45, F12 = 44, F11 = 43, F10 = 42, F9 = 41, F8 = 40,
++    F7 = 39, F6 = 38, F5 = 37, F4 = 36, F3 = 35, F2 = 34, F1 = 33, F0 = 32,
++    X31 = 31, X30 = 30,
++    X29 = 29, X28 = 28, X27 = 27, X26 = 26, X25 = 25, X24 = 24, X23 = 23,
++    X22 = 22, X21 = 21, X20 = 20, X19 = 19, X18 = 18, X17 = 17 , X16 = 16,
++    X15 = 15, X14 = 14, X13 = 13, X12 = 12, X11 = 11, X10 = 10, X9 = 9,
++    X8 = 8, X7 = 7, X6 = 6, X5 = 5, X4 = 4, X3 = 3, X2 = 2, X1 = 1, X0 = 0
++};
++
++
++inline uint64_t to_i(Target t){ return static_cast<uint64_t>(t); }
++inline Target   to_T(uint64_t v){ return static_cast<Target>(v); }
++
++// A precise location where a source contributed to a target
++struct prog_position {
++  uint64_t instr{};
++  uint64_t pc{};
++  uint16_t pos{}; // RS1/2/3/PC/IMM/BYTE1..8/CSR_POS_TARGET/etc.
++  bool operator<(const prog_position& o) const {
++    if (instr != o.instr) return instr < o.instr;
++    return pos < o.pos;
++  }
++};
++
++// data‑flow edge. Not yet populated in this version; the vector exists to make
++// it easy to extend later.
++struct weak_dependency {
++  bool is_memory = false;
++  std::array<uint64_t,8> mem_addrs{};
++  Target reg = Target::NONE;
++
++};
++
++// Immutable snapshot of a target right after one instruction commits.
++// The chain is formed via `prev` to earlier states of the same target.
++struct snapshot {
++  Target name = Target::NONE;         // which target this snapshot belongs to
++  uint64_t pc = 0;                    // PC when it was produced
++
++  // current deps: RS1, RS2, RS3, PC
++  std::array<Target,CURRENT_DEPENDENCIES_SIZE> current_deps {Target::NONE, Target::NONE, Target::NONE, Target::NONE};
++
++  // Position metadata for each strong dep, plus IMM and BYTE1..8
++  std::array<std::optional<prog_position>,CURRENT_DEPENDENCY_POSITION_SIZE> dep_pos{};
++
++  // initial deps (registers 0..93)
++  std::bitset<NBR_OF_ACTUAL_DEPENDENCIES> initial_regs{};
++  std::vector<uint64_t> initial_mem;
++
++  // For loads: which concrete byte addresses were read in this snapshot.
++  std::array<std::optional<uint64_t>,8> local_bytes{};
++
++  // weak deps
++  std::vector<weak_dependency> weak_deps;
++  std::vector<prog_position> weak_dep_positions;
++
++  std::shared_ptr<snapshot> prev;
++};
++
++// Per‑byte memory entry with a current snapshot 
++struct mem_entry {
++  uint64_t addr{};
++  std::shared_ptr<snapshot> cur; // current dependency snapshot for this byte
++};
++
++class Dep_tracker {
++public:
++  explicit Dep_tracker(reg_t initial_pc)
++    : instr_(0), pc_(initial_pc) {
++    // Create a vault entry for each Target value.
++    vault_.resize(NUMBER_OF_DEPENDENCIES);
++    for (uint16_t i = 0; i < NUMBER_OF_DEPENDENCIES; ++i) {
++      vault_[i] = std::make_unique<snapshot>();
++      vault_[i]->name = to_T(i);
++      // Initialize "self depends on itself" for all architectural state except PC.
++      if (i != to_i(Target::ACCU) && i != to_i(Target::ACCU_PC)) {
++        if (i != to_i(Target::PC) && i < NBR_OF_ACTUAL_DEPENDENCIES)
++          vault_[i]->initial_regs.set(i); //each reg depends on itself
++      }
++    }
++    // Remaining memory weak deps “baseline”
++    remaining_mem_ = std::make_unique<snapshot>();
++    remaining_mem_->name = Target::MEM;
++  }
++
++  // Add a dep edge “target depends on source at source_pos”.
++  // int_float_relation: bit0 for source, bit1 for target (0=int,1=float)
++  bool track_dependency(Target target, Target source,
++                        uint16_t source_pos,
++                        uint8_t int_float_relation,
++                        bool csr_implicit, INIT_STATE state);
++
++  // Memory interaction: LOAD (source==MEM) or STORE (target==MEM)
++  bool track_memory(Target target, Target source,
++                    uint64_t addr, uint8_t width,
++                    uint8_t int_float_relation, INIT_STATE state);
++
++  // Finalize the current instruction: push accumulator(s) into the vault/memory
++  // and reset accumulators for the next instruction.
++  bool commit_target();
++
++  // Advance to next instruction (updates pc and instruction counter).
++  bool next_instruction(reg_t new_pc);
++
++  // Called at leak time: compute and write the required dependency addresses.
++  void save_req_dependencies_on_file(Leak &cur_leak, std::ostream& dep_file);
++
++private:
++
++  uint64_t instr_;
++  uint64_t pc_;
++  bool     mem_used_ = false;
++  bool     csr_impl_ = false;
++
++  std::vector<std::unique_ptr<snapshot>> vault_;   // index = Target value
++  std::unordered_map<uint64_t, mem_entry> mem_;     // per byte
++  std::array<mem_entry*,8> last_bytes_{};           // store aggregation
++  std::unique_ptr<snapshot> remaining_mem_;        // weak deps baseline
++
++  static bool is_xreg(Target t){ return to_i(t) < 32; }
++  static bool is_freg(Target t){ return to_i(t) >= 32 && to_i(t) < 64; }
++  static bool is_csr (Target t){ return to_i(t) >= 64 && to_i(t) < 93; }
++
++  // Convert between int/fp register namespaces according to instruction bits.
++  Target lift_to_fp(uint8_t ir_bits, Target t, bool is_target){
++    if (t == Target::MEM || t == Target::PC || t == Target::IMM || t==Target::NONE) return t;
++    bool need_fp = is_target ? (ir_bits & 0b10) : (ir_bits & 0b01);
++    if (!need_fp && is_xreg(t)) return to_T(to_i(t)+32); // int->float
++    return t;
++  }
++
++  prog_position cur_pos(uint16_t pos) const { return prog_position{instr_, pc_, pos}; }
++
++  // push position into vector
++  static void push_pos(std::vector<prog_position>& vec, prog_position p){
++    auto it = std::lower_bound(vec.begin(), vec.end(), p);
++    if (it==vec.end() || it->instr!=p.instr || it->pos!=p.pos) vec.insert(it, p);
++  }
++
++  // Accessors for the two accumulators
++  snapshot* accu()    { return vault_[to_i(Target::ACCU)].get(); }
++  snapshot* accu_pc() { return vault_[to_i(Target::ACCU_PC)].get(); }
++
++  // Find or create mem_entry for a byte address. New bytes are seeded from
++  mem_entry& get_mem(uint64_t addr){ //build a new mem_entry object for the new addr and save its deps.
++    auto it = mem_.find(addr);
++    if (it != mem_.end()) return it->second;
++    else {
++      auto [it,ins] = mem_.emplace(addr, mem_entry{addr,{}});
++      if (ins) {
++        it->second.cur = std::make_unique<snapshot>(*remaining_mem_);
++        it->second.cur->initial_mem = {addr};
++        it->second.cur->weak_deps = remaining_mem_->weak_deps; // future use
++        it->second.cur->name = Target::MEM;
++      }
++      return it->second;
++    }
++  }
++
++  // Copy leaf sets from src to dst (set union without duplicates for memory).
++  void add_initials_from(const snapshot* src, snapshot* dst, INIT_STATE state){
++    if (!src) return;
++    if (state == INIT_STATE::OVERWRITE) {
++      dst->initial_regs = src->initial_regs;
++      dst->initial_mem = src->initial_mem;
++      return;
++    }
++    else if( state == INIT_STATE::ADD) {
++      dst->initial_regs |= src->initial_regs;
++      for (auto a : src->initial_mem) {
++        if (std::find(dst->initial_mem.begin(), dst->initial_mem.end(), a) == dst->initial_mem.end())
++          dst->initial_mem.push_back(a);
++      }
++    }
++  }
++
++  // Push the (non‑ACCU) accumulator into the corresponding vault/memory entry
++  // and reset the accumulator object for the next instruction.
++  void commit_one_accu(snapshot* a){
++    if (a->name==Target::ACCU || a->name==Target::ACCU_PC) return;
++
++    if (a->name != Target::X0 && a->name != Target::NONE) {
++      a->current_deps[PC_INDEX] = Target::PC;
++      a->dep_pos[PC_INDEX] = cur_pos(PC_DEP);
++      add_initials_from(vault_[to_i(Target::PC)].get(), a, INIT_STATE::ADD);
++    }
++
++    if (a->name == Target::MEM) {
++      // STORE: duplicate the accumulator snapshot for each touched byte and
++      // link it into the byte's history.
++      for (auto b : last_bytes_) {
++        if (!b) break;
++        std::unique_ptr<snapshot> ns = std::make_unique<snapshot>(*a);
++        add_initials_from(a,b->cur.get(), INIT_STATE::OVERWRITE);
++        // ns->name = Target::MEM;
++        // ns->prev = std::move(b->cur);
++        // b->cur = std::make_uni/que<snapshot>(*a);
++      }
++      // weak dep positions for other memory:
++    } else {
++      // register/PC/CSR target
++      auto& tgt = vault_[to_i(a->name)];
++      std::unique_ptr<snapshot> ns = std::make_unique<snapshot>(*a);
++      ns->prev = std::move(tgt);
++      tgt = std::move(ns);
++    }
++
++    // reset accumulator
++    *a = snapshot{};
++    a->name = (a == accu()) ? Target::ACCU : Target::ACCU_PC;
++  }
++};
++
++void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t* p, std::ostream& dep_file);
++
++#endif
+\ No newline at end of file
+diff --git a/riscv/encoding.h b/riscv/encoding.h
+index 225aabba..bcc1ace2 100644
+--- a/riscv/encoding.h
++++ b/riscv/encoding.h
+@@ -4,7 +4,7 @@
+ 
+ /*
+  * This file is auto-generated by running 'make' in
+- * https://github.com/riscv/riscv-opcodes (1d4b38c)
++ * https://github.com/riscv/riscv-opcodes (8899b32)
+  */
+ 
+ #ifndef RISCV_CSR_ENCODING_H
+@@ -199,7 +199,6 @@
+ #define MSTATEEN0_CTR      0x0040000000000000
+ #define MSTATEEN0_PRIV113  0x0100000000000000
+ #define MSTATEEN0_PRIV114  0x0080000000000000
+-#define MSTATEEN0_IMSIC    0x0400000000000000
+ #define MSTATEEN0_HCONTEXT 0x0200000000000000
+ #define MSTATEEN0_AIA      0x0800000000000000
+ #define MSTATEEN0_CSRIND   0x1000000000000000
+@@ -209,7 +208,6 @@
+ #define MSTATEEN0H_CTR      0x00400000
+ #define MSTATEEN0H_PRIV113  0x01000000
+ #define MSTATEEN0H_PRIV114  0x00800000
+-#define MSTATEEN0H_IMSIC    0x04000000
+ #define MSTATEEN0H_HCONTEXT 0x02000000
+ #define MSTATEEN0H_AIA      0x08000000
+ #define MSTATEEN0H_CSRIND   0x10000000
+@@ -270,25 +268,11 @@
+ #define SISELECT_SMCDELEG_HPMEVENT_3    0x43
+ #define SISELECT_SMCDELEG_END           0x5f
+ 
+-#define MISELECT_IPRIO     0x30
+-#define MISELECT_IPRIO_TOP 0x3f
+-#define MISELECT_IMSIC     0x70
+-#define MISELECT_IMSIC_TOP 0xff
+-
+-#define SISELECT_IPRIO     0x30
+-#define SISELECT_IPRIO_TOP 0x3f
+-#define SISELECT_IMSIC     0x70
+-#define SISELECT_IMSIC_TOP 0xff
+-
+-#define VSISELECT_IMSIC     0x70
+-#define VSISELECT_IMSIC_TOP 0xff
+-
+ #define HSTATEEN0_CS       0x00000001
+ #define HSTATEEN0_FCSR     0x00000002
+ #define HSTATEEN0_JVT      0x00000004
+ #define HSTATEEN0_CTR      0x0040000000000000
+ #define HSTATEEN0_SCONTEXT 0x0200000000000000
+-#define HSTATEEN0_IMSIC    0x0400000000000000
+ #define HSTATEEN0_AIA      0x0800000000000000
+ #define HSTATEEN0_CSRIND   0x1000000000000000
+ #define HSTATEEN0_SENVCFG  0x4000000000000000
+@@ -296,7 +280,6 @@
+ 
+ #define HSTATEEN0H_CTR      0x00400000
+ #define HSTATEEN0H_SCONTEXT 0x02000000
+-#define HSTATEEN0H_IMSIC    0x04000000
+ #define HSTATEEN0H_AIA      0x08000000
+ #define HSTATEEN0H_CSRIND   0x10000000
+ #define HSTATEEN0H_SENVCFG  0x40000000
+@@ -1688,8 +1671,6 @@
+ #define MASK_VFADD_VF 0xfc00707f
+ #define MATCH_VFADD_VV 0x1057
+ #define MASK_VFADD_VV 0xfc00707f
+-#define MATCH_VFBDOT_VV 0xac001077
+-#define MASK_VFBDOT_VV 0xfc00707f
+ #define MATCH_VFCLASS_V 0x4c081057
+ #define MASK_VFCLASS_V 0xfc0ff07f
+ #define MATCH_VFCVT_F_X_V 0x48019057
+@@ -1762,14 +1743,8 @@
+ #define MASK_VFNCVT_X_F_W 0xfc0ff07f
+ #define MATCH_VFNCVT_XU_F_W 0x48081057
+ #define MASK_VFNCVT_XU_F_W 0xfc0ff07f
+-#define MATCH_VFNCVTBF16_F_F_Q 0x480c9057
+-#define MASK_VFNCVTBF16_F_F_Q 0xfc0ff07f
+ #define MATCH_VFNCVTBF16_F_F_W 0x480e9057
+ #define MASK_VFNCVTBF16_F_F_W 0xfc0ff07f
+-#define MATCH_VFNCVTBF16_SAT_F_F_Q 0x480d9057
+-#define MASK_VFNCVTBF16_SAT_F_F_Q 0xfc0ff07f
+-#define MATCH_VFNCVTBF16_SAT_F_F_W 0x480f9057
+-#define MASK_VFNCVTBF16_SAT_F_F_W 0xfc0ff07f
+ #define MATCH_VFNMACC_VF 0xb4005057
+ #define MASK_VFNMACC_VF 0xfc00707f
+ #define MATCH_VFNMACC_VV 0xb4001057
+@@ -1832,8 +1807,6 @@
+ #define MASK_VFWADD_WF 0xfc00707f
+ #define MATCH_VFWADD_WV 0xd0001057
+ #define MASK_VFWADD_WV 0xfc00707f
+-#define MATCH_VFWBDOT_VV 0xb0001077
+-#define MASK_VFWBDOT_VV 0xfc00707f
+ #define MATCH_VFWCVT_F_F_V 0x48061057
+ #define MASK_VFWCVT_F_F_V 0xfc0ff07f
+ #define MATCH_VFWCVT_F_X_V 0x48059057
+@@ -2172,10 +2145,6 @@
+ #define MASK_VOR_VV 0xfc00707f
+ #define MATCH_VOR_VX 0x28004057
+ #define MASK_VOR_VX 0xfc00707f
+-#define MATCH_VQBDOTS_VV 0xbc000077
+-#define MASK_VQBDOTS_VV 0xfc00707f
+-#define MATCH_VQBDOTU_VV 0xb8000077
+-#define MASK_VQBDOTU_VV 0xfc00707f
+ #define MATCH_VQDOT_VV 0xb0002057
+ #define MASK_VQDOT_VV 0xfc00707f
+ #define MATCH_VQDOT_VX 0xb0006057
+@@ -2529,6 +2498,8 @@
+ #define CSR_VTYPE 0xc21
+ #define CSR_VLENB 0xc22
+ #define CSR_SSTATUS 0x100
++#define CSR_SEDELEG 0x102
++#define CSR_SIDELEG 0x103
+ #define CSR_SIE 0x104
+ #define CSR_STVEC 0x105
+ #define CSR_SCOUNTEREN 0x106
+@@ -2996,6 +2967,7 @@
+ #define INSN_FIELD_IMM4 0xf00000
+ #define INSN_FIELD_IMM5 0x1f00000
+ #define INSN_FIELD_IMM6 0x3f00000
++#define INSN_FIELD_ZIMM 0xf8000
+ #define INSN_FIELD_OPCODE 0x7f
+ #define INSN_FIELD_FUNCT7 0xfe000000
+ #define INSN_FIELD_VD 0xf80
+@@ -3061,12 +3033,6 @@
+ #define INSN_FIELD_C_RS2 0x7c
+ #define INSN_FIELD_C_SREG1 0x380
+ #define INSN_FIELD_C_SREG2 0x1c
+-#define INSN_FIELD_RD_P_E 0x18
+-#define INSN_FIELD_RS2_P_E 0x18
+-#define INSN_FIELD_RD_N0_E 0xf00
+-#define INSN_FIELD_C_RS2_E 0x78
+-#define INSN_FIELD_RD_E 0xf00
+-#define INSN_FIELD_RS2_E 0x1e00000
+ #define INSN_FIELD_MOP_R_T_30 0x40000000
+ #define INSN_FIELD_MOP_R_T_27_26 0xc000000
+ #define INSN_FIELD_MOP_R_T_21_20 0x300000
+@@ -3647,7 +3613,6 @@ DECLARE_INSN(vdivu_vv, MATCH_VDIVU_VV, MASK_VDIVU_VV)
+ DECLARE_INSN(vdivu_vx, MATCH_VDIVU_VX, MASK_VDIVU_VX)
+ DECLARE_INSN(vfadd_vf, MATCH_VFADD_VF, MASK_VFADD_VF)
+ DECLARE_INSN(vfadd_vv, MATCH_VFADD_VV, MASK_VFADD_VV)
+-DECLARE_INSN(vfbdot_vv, MATCH_VFBDOT_VV, MASK_VFBDOT_VV)
+ DECLARE_INSN(vfclass_v, MATCH_VFCLASS_V, MASK_VFCLASS_V)
+ DECLARE_INSN(vfcvt_f_x_v, MATCH_VFCVT_F_X_V, MASK_VFCVT_F_X_V)
+ DECLARE_INSN(vfcvt_f_xu_v, MATCH_VFCVT_F_XU_V, MASK_VFCVT_F_XU_V)
+@@ -3684,10 +3649,7 @@ DECLARE_INSN(vfncvt_rtz_x_f_w, MATCH_VFNCVT_RTZ_X_F_W, MASK_VFNCVT_RTZ_X_F_W)
+ DECLARE_INSN(vfncvt_rtz_xu_f_w, MATCH_VFNCVT_RTZ_XU_F_W, MASK_VFNCVT_RTZ_XU_F_W)
+ DECLARE_INSN(vfncvt_x_f_w, MATCH_VFNCVT_X_F_W, MASK_VFNCVT_X_F_W)
+ DECLARE_INSN(vfncvt_xu_f_w, MATCH_VFNCVT_XU_F_W, MASK_VFNCVT_XU_F_W)
+-DECLARE_INSN(vfncvtbf16_f_f_q, MATCH_VFNCVTBF16_F_F_Q, MASK_VFNCVTBF16_F_F_Q)
+ DECLARE_INSN(vfncvtbf16_f_f_w, MATCH_VFNCVTBF16_F_F_W, MASK_VFNCVTBF16_F_F_W)
+-DECLARE_INSN(vfncvtbf16_sat_f_f_q, MATCH_VFNCVTBF16_SAT_F_F_Q, MASK_VFNCVTBF16_SAT_F_F_Q)
+-DECLARE_INSN(vfncvtbf16_sat_f_f_w, MATCH_VFNCVTBF16_SAT_F_F_W, MASK_VFNCVTBF16_SAT_F_F_W)
+ DECLARE_INSN(vfnmacc_vf, MATCH_VFNMACC_VF, MASK_VFNMACC_VF)
+ DECLARE_INSN(vfnmacc_vv, MATCH_VFNMACC_VV, MASK_VFNMACC_VV)
+ DECLARE_INSN(vfnmadd_vf, MATCH_VFNMADD_VF, MASK_VFNMADD_VF)
+@@ -3719,7 +3681,6 @@ DECLARE_INSN(vfwadd_vf, MATCH_VFWADD_VF, MASK_VFWADD_VF)
+ DECLARE_INSN(vfwadd_vv, MATCH_VFWADD_VV, MASK_VFWADD_VV)
+ DECLARE_INSN(vfwadd_wf, MATCH_VFWADD_WF, MASK_VFWADD_WF)
+ DECLARE_INSN(vfwadd_wv, MATCH_VFWADD_WV, MASK_VFWADD_WV)
+-DECLARE_INSN(vfwbdot_vv, MATCH_VFWBDOT_VV, MASK_VFWBDOT_VV)
+ DECLARE_INSN(vfwcvt_f_f_v, MATCH_VFWCVT_F_F_V, MASK_VFWCVT_F_F_V)
+ DECLARE_INSN(vfwcvt_f_x_v, MATCH_VFWCVT_F_X_V, MASK_VFWCVT_F_X_V)
+ DECLARE_INSN(vfwcvt_f_xu_v, MATCH_VFWCVT_F_XU_V, MASK_VFWCVT_F_XU_V)
+@@ -3889,8 +3850,6 @@ DECLARE_INSN(vnsrl_wx, MATCH_VNSRL_WX, MASK_VNSRL_WX)
+ DECLARE_INSN(vor_vi, MATCH_VOR_VI, MASK_VOR_VI)
+ DECLARE_INSN(vor_vv, MATCH_VOR_VV, MASK_VOR_VV)
+ DECLARE_INSN(vor_vx, MATCH_VOR_VX, MASK_VOR_VX)
+-DECLARE_INSN(vqbdots_vv, MATCH_VQBDOTS_VV, MASK_VQBDOTS_VV)
+-DECLARE_INSN(vqbdotu_vv, MATCH_VQBDOTU_VV, MASK_VQBDOTU_VV)
+ DECLARE_INSN(vqdot_vv, MATCH_VQDOT_VV, MASK_VQDOT_VV)
+ DECLARE_INSN(vqdot_vx, MATCH_VQDOT_VX, MASK_VQDOT_VX)
+ DECLARE_INSN(vqdotsu_vv, MATCH_VQDOTSU_VV, MASK_VQDOTSU_VV)
+@@ -4092,6 +4051,8 @@ DECLARE_CSR(vl, CSR_VL)
+ DECLARE_CSR(vtype, CSR_VTYPE)
+ DECLARE_CSR(vlenb, CSR_VLENB)
+ DECLARE_CSR(sstatus, CSR_SSTATUS)
++DECLARE_CSR(sedeleg, CSR_SEDELEG)
++DECLARE_CSR(sideleg, CSR_SIDELEG)
+ DECLARE_CSR(sie, CSR_SIE)
+ DECLARE_CSR(stvec, CSR_STVEC)
+ DECLARE_CSR(scounteren, CSR_SCOUNTEREN)
+diff --git a/riscv/execute.cc b/riscv/execute.cc
+index 1b572a7b..5afecf08 100644
+--- a/riscv/execute.cc
++++ b/riscv/execute.cc
+@@ -6,6 +6,9 @@
+ #include "disasm.h"
+ #include "decode_macros.h"
+ #include <cassert>
++#include "leakage.h"
++#include "platform.h"
++#include "dep.h"
+ 
+ static void commit_log_reset(processor_t* p)
+ {
+@@ -22,7 +25,7 @@ static void commit_log_stash_privilege(processor_t* p)
+   state->last_inst_flen = p->get_flen();
+ }
+ 
+-static void commit_log_print_value(FILE *log_file, int width, const void *data)
++static void commit_log_print_value(FILE *log_file, int width, const void *data) //M:: maybe commit is here
+ {
+   assert(log_file);
+ 
+@@ -59,7 +62,7 @@ static void commit_log_print_value(FILE *log_file, int width, uint64_t val)
+   commit_log_print_value(log_file, width, &val);
+ }
+ 
+-static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
++static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn) //M:: maybe commit
+ {
+   FILE *log_file = p->get_log_file();
+ 
+@@ -158,10 +161,13 @@ inline void processor_t::update_histogram(reg_t pc)
+ 
+ // These two functions are expected to be inlined by the compiler separately in
+ // the processor_t::step() loop. The logged variant is used in the slow path
+-static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch) {
++static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker, Leakage &leakages) //M:: execute instruction and update pc{
++{
++  add_dependency(dep_tracker, pc, fetch.insn, p, dep_out);
++  add_leakage(leakages, pc, fetch.insn, fetch.func, p);
+   return fetch.func(p, fetch.insn, pc);
+ }
+-static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch)
++static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker, Leakage &leakages) //M:: execute instruction and update pc
+ {
+   if (p->get_log_commits_enabled()) {
+     commit_log_reset(p);
+@@ -182,8 +188,10 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
+         commit_log_print_insn(p, pc, fetch.insn);
+       }
+       throw;
+-  } catch(mem_trap_t& t) {
++  } catch(mem_trap_t& t) { //M:: excp
+       //handle segfault in midlle of vector load/store
++      std::cerr << "Memory trap exception\n";
++      exit(-1);
+       if (p->get_log_commits_enabled()) {
+         for (auto item : p->get_state()->log_reg_write) {
+           if ((item.first & 3) == 3) {
+@@ -198,6 +206,9 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
+   }
+   p->update_histogram(pc);
+ 
++  add_dependency(dep_tracker, pc, fetch.insn, p, dep_out);
++  add_leakage(leakages, npc, fetch.insn, fetch.func, p);
++
+   return npc;
+ }
+ 
+@@ -207,8 +218,10 @@ bool processor_t::slow_path() const
+          log_commits_enabled || histogram_enabled || in_wfi || check_triggers_icount;
+ }
+ 
+-// fetch/decode/execute loop
+-void processor_t::step(size_t n)
++
++
++// M:: fetch/decode/execute loop
++void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc and idle is called inside run in htif.cc
+ {
+   mmu_t* _mmu = mmu;
+ 
+@@ -232,12 +245,15 @@ void processor_t::step(size_t n)
+     }
+   }
+ 
++  Dep_tracker dep_tracker(state.pc);
++  Leakage leakages;
+   while (n > 0) {
++
+     size_t instret = 0;
+     reg_t pc = state.pc;
+     state.prv_changed = false;
+     state.v_changed = false;
+-
++    //M:: pc is updated by execute_insn_logged
+     #define advance_pc() \
+       if (unlikely(invalid_pc(pc))) { \
+         switch (pc) { \
+@@ -254,6 +270,7 @@ void processor_t::step(size_t n)
+ 
+     try
+     {
++
+       take_pending_interrupt();
+ 
+       check_if_lpad_required();
+@@ -263,6 +280,10 @@ void processor_t::step(size_t n)
+         // Main simulation loop, slow path.
+         while (instret < n)
+         {
++         
++          leakages.delete_all_leaks();
++          // Dep_tracker dep_tracker(pc);
++          // init_leaks(&leakage);
+           if (unlikely(!state.serialized && state.single_step == state.STEP_STEPPED)) {
+             state.single_step = state.STEP_NONE;
+             if (!state.debug_mode) {
+@@ -290,11 +311,13 @@ void processor_t::step(size_t n)
+           }
+ 
+           in_wfi = false;
+-          insn_fetch_t fetch = mmu->load_insn(pc);
++          insn_fetch_t fetch = mmu->load_insn(pc); //M:: fetch instruction from I$ and decode it
+           if (debug && !state.serialized)
+             disasm(fetch.insn);
+-          pc = execute_insn_logged(this, pc, fetch);
++          pc = execute_insn_logged(this, pc, fetch, dep_tracker,leakages); //M:: inside this
+           advance_pc();
++          dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
++          dep_tracker.next_instruction(pc);
+ 
+           // Resume from debug mode in critical error
+           if (state.critical_error && !state.debug_mode) {
+@@ -306,14 +329,19 @@ void processor_t::step(size_t n)
+               enter_debug_mode(DCSR_CAUSE_HALT, 0);
+             }
+           }
++          // leakages.delete_all_leaks();
+         }
+       }
+       else while (instret < n)
+       {
+         // Main simulation loop, fast path.
++        leakages.delete_all_leaks();
++        // Dep_tracker dep_tracker1(pc);
++        // dep_tracker.next_instruction(pc);
++        // init_leaks(&leakage);
+         for (auto ic_entry = _mmu->access_icache(pc); ; ) {
+           auto fetch = ic_entry->data;
+-          pc = execute_insn_fast(this, pc, fetch);
++          pc = execute_insn_fast(this, pc, fetch, dep_tracker,leakages); //M:: inside this
+           ic_entry = ic_entry->next;
+           if (unlikely(ic_entry->tag != pc))
+             break;
+@@ -322,11 +350,13 @@ void processor_t::step(size_t n)
+           instret++;
+           state.pc = pc;
+         }
+-
+         advance_pc();
++        dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
++        dep_tracker.next_instruction(pc);
++        // leakages.delete_all_leaks();
+       }
+     }
+-    catch(trap_t& t)
++    catch(trap_t& t) //M:: excp
+     {
+       take_trap(t, pc);
+       n = instret;
+@@ -376,5 +406,8 @@ void processor_t::step(size_t n)
+     state.mcycle->bump((state.mcountinhibit->read() & MCOUNTINHIBIT_CY) ? 0 : instret);
+ 
+     n -= instret;
++
+   }
++  leakages.print_leaks(leak_out);
++  leakages.delete_all_leaks();
+ }
+diff --git a/riscv/insn_template.cc b/riscv/insn_template.cc
+index 168e2dc8..84230863 100644
+--- a/riscv/insn_template.cc
++++ b/riscv/insn_template.cc
+@@ -1,4 +1,5 @@
+ // See LICENSE for license details.
++//M:: where each inst functionality is accessed.
+ 
+ #include "insn_template.h"
+ #include "insn_macros.h"
+diff --git a/riscv/insns/ecall.h b/riscv/insns/ecall.h
+index e6c723f4..4ec444ed 100644
+--- a/riscv/insns/ecall.h
++++ b/riscv/insns/ecall.h
+@@ -1,11 +1,15 @@
+ switch (STATE.prv)
+ {
+-  case PRV_U: throw trap_user_ecall();
++  case PRV_U:
++    throw trap_user_ecall();
+   case PRV_S:
+-    if (STATE.v)
++    if (STATE.v){
+       throw trap_virtual_supervisor_ecall();
+-    else
++    }
++    else{
+       throw trap_supervisor_ecall();
+-  case PRV_M: throw trap_machine_ecall();
++    }
++  case PRV_M:
++    throw trap_machine_ecall();
+   default: abort();
+ }
+diff --git a/riscv/insns/vfbdot_vv.h b/riscv/insns/vfbdot_vv.h
+deleted file mode 100644
+index c4db1611..00000000
+--- a/riscv/insns/vfbdot_vv.h
++++ /dev/null
+@@ -1,13 +0,0 @@
+-ZVBDOT_INIT(1);
+-require_fp;
+-
+-switch (P.VU.vsew) {
+-  case 32: {
+-    // TODO replace with bulk-norm routine and invoke ZVBDOT_LOOP instead of ZVBDOT_GENERIC_LOOP
+-    require_extension(EXT_ZVFBDOT32F);
+-    auto macc = [](auto a, auto b, auto c) { return f32_add(c, f32_mul(a, b)); };
+-    ZVBDOT_GENERIC_LOOP(float32_t, float32_t, float32_t, macc);
+-    break;
+-  }
+-  default: require(false);
+-}
+diff --git a/riscv/insns/vfwbdot_vv.h b/riscv/insns/vfwbdot_vv.h
+deleted file mode 100644
+index 295aee9e..00000000
+--- a/riscv/insns/vfwbdot_vv.h
++++ /dev/null
+@@ -1,17 +0,0 @@
+-ZVBDOT_INIT(2);
+-require_fp;
+-
+-switch (P.VU.vsew) {
+-  case 16: {
+-    if (P.VU.altfmt()) {
+-      // TODO replace with bulk-norm routine and invoke ZVBDOT_LOOP instead of ZVBDOT_GENERIC_LOOP
+-      require_extension(EXT_ZVFWBDOT16BF);
+-      auto macc = [](auto a, auto b, auto c) { return f32_add(c, f32_mul(bf16_to_f32(a), bf16_to_f32(b))); };
+-      ZVBDOT_GENERIC_LOOP(bfloat16_t, bfloat16_t, float32_t, macc);
+-    } else {
+-      require(false);
+-    }
+-    break;
+-  }
+-  default: require(false);
+-}
+diff --git a/riscv/insns/vqbdots_vv.h b/riscv/insns/vqbdots_vv.h
+deleted file mode 100644
+index 2daf868f..00000000
+--- a/riscv/insns/vqbdots_vv.h
++++ /dev/null
+@@ -1,23 +0,0 @@
+-ZVBDOT_INIT(4);
+-
+-switch (P.VU.vsew) {
+-  case 8: {
+-    require_extension(EXT_ZVQBDOT8I);
+-    if (P.VU.altfmt()) {
+-      ZVBDOT_SIMPLE_LOOP(int8_t, int8_t, uint32_t);
+-    } else {
+-      ZVBDOT_SIMPLE_LOOP(uint8_t, int8_t, uint32_t);
+-    }
+-    break;
+-  }
+-  case 16: {
+-    require_extension(EXT_ZVQBDOT16I);
+-    if (P.VU.altfmt()) {
+-      ZVBDOT_SIMPLE_LOOP(int16_t, int16_t, uint64_t);
+-    } else {
+-      ZVBDOT_SIMPLE_LOOP(uint16_t, int16_t, uint64_t);
+-    }
+-    break;
+-  }
+-  default: require(false);
+-}
+diff --git a/riscv/insns/vqbdotu_vv.h b/riscv/insns/vqbdotu_vv.h
+deleted file mode 100644
+index d6e0c4bd..00000000
+--- a/riscv/insns/vqbdotu_vv.h
++++ /dev/null
+@@ -1,23 +0,0 @@
+-ZVBDOT_INIT(4);
+-
+-switch (P.VU.vsew) {
+-  case 8: {
+-    require_extension(EXT_ZVQBDOT8I);
+-    if (P.VU.altfmt()) {
+-      ZVBDOT_SIMPLE_LOOP(int8_t, uint8_t, uint32_t);
+-    } else {
+-      ZVBDOT_SIMPLE_LOOP(uint8_t, uint8_t, uint32_t);
+-    }
+-    break;
+-  }
+-  case 16: {
+-    require_extension(EXT_ZVQBDOT16I);
+-    if (P.VU.altfmt()) {
+-      ZVBDOT_SIMPLE_LOOP(int16_t, uint16_t, uint64_t);
+-    } else {
+-      ZVBDOT_SIMPLE_LOOP(uint16_t, uint16_t, uint64_t);
+-    }
+-    break;
+-  }
+-  default: require(false);
+-}
+diff --git a/riscv/insns/vsm4r_vs.h b/riscv/insns/vsm4r_vs.h
+index 8db10505..8bbf777b 100644
+--- a/riscv/insns/vsm4r_vs.h
++++ b/riscv/insns/vsm4r_vs.h
+@@ -2,6 +2,8 @@
+ 
+ #include "zvksed_ext_macros.h"
+ 
++const uint32_t EGS = 4;
++
+ require_vsm4_constraints;
+ require_align(insn.rd(), P.VU.vflmul);
+ require_vs2_align_eglmul(128);
+diff --git a/riscv/isa_parser.h b/riscv/isa_parser.h
+index 376a5285..e99f720c 100644
+--- a/riscv/isa_parser.h
++++ b/riscv/isa_parser.h
+@@ -68,10 +68,6 @@ typedef enum {
+   EXT_ZVKSED,
+   EXT_ZVKSH,
+   EXT_ZVQDOTQ,
+-  EXT_ZVQBDOT8I,
+-  EXT_ZVQBDOT16I,
+-  EXT_ZVFWBDOT16BF,
+-  EXT_ZVFBDOT32F,
+   EXT_SSTC,
+   EXT_ZAAMO,
+   EXT_ZALRSC,
+diff --git a/riscv/leakage.cc b/riscv/leakage.cc
+new file mode 100644
+index 00000000..71362733
+--- /dev/null
++++ b/riscv/leakage.cc
+@@ -0,0 +1,61 @@
++#include "leakage.h"
++#include "config.h"
++// #include "processor.h"
++#include "mmu.h"
++#include "disasm.h"
++#include "decode_macros.h"
++#include <cassert>
++#include "platform.h"
++// #include "decode.h"
++
++
++
++void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, processor_t *p)
++{
++    leaks.add_leak("PC", npc);
++    
++    if (insn.opcode()==0b0000011 ) //load addr
++        leaks.add_leak("LOAD",insn.i_imm()+RS1,insn.rs1());
++        //also adding memory addr's dependency in dep_tracker
++
++    else if(insn.opcode()==0b0100011) //store addr
++        leaks.add_leak("STORE",insn.i_imm()+RS1,insn.rs1());
++
++    if(insn.opcode()==0b0000011 && (contract==SEQ_ARCH || contract==TOP)) 
++        leaks.add_leak("L-Val",RD,insn.rd()); //load value
++
++    uint8_t taken=0;
++    if(insn.opcode()==0b1100011 && (contract==SEQ_CT_B || contract==TOP)) {
++        if (insn.funct3() == 0b000){ //beq
++            if(RS1 == RS2) 
++                taken=1;
++        }
++        else if (insn.funct3() == 0b001){ //bne
++            if(RS1 != RS2) 
++                taken=1;
++        }
++        else if (insn.funct3() == 0b100){ //blt
++            if(sreg_t(RS1) < sreg_t(RS2))
++                taken=1;
++        }
++        else if (insn.funct3() == 0b101){ //bge
++            if(sreg_t(RS1) >= sreg_t(RS2)) 
++                taken=1;
++        }
++        else if (insn.funct3() == 0b110){ //bltu
++            if(RS1 < RS2)
++                taken=1;
++        }
++        else if (insn.funct3() == 0b111){ //bgeu
++            if(RS1 >= RS2) 
++                taken=1;
++        }
++        leaks.add_leak( "taken", taken, insn.rs1(), insn.rs2());
++    }
++
++    if (insn.opcode()==0b0110011 && (contract==SEQ_BM || contract==TOP)) {
++        leaks.add_leak("M rs1", RS1, insn.rs1());
++        leaks.add_leak("M rs2", RS2, insn.rs2());
++    }
++}
++
+diff --git a/riscv/leakage.h b/riscv/leakage.h
+new file mode 100644
+index 00000000..563b704b
+--- /dev/null
++++ b/riscv/leakage.h
+@@ -0,0 +1,54 @@
++
++#ifndef _RISCV_LEAKAGE_H
++#define _RISCV_LEAKAGE_H
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++#include <sys/queue.h>
++#include "decode.h"
++#include "processor.h"
++#include <cstdint>
++#include <cstdio>
++#include <deque>
++#include <string>
++#include <ostream>
++// #include "dep.h"
++struct Leak {
++    std::string  loc;
++    std::uint64_t value{}; 
++    std::uint64_t dep_reg1{};
++    std::uint64_t dep_reg2{};
++    //normally one dep reg except for branches and mul/div
++};
++
++class Leakage {
++public:
++
++    void add_leak(std::string loc, std::uint64_t value, std::uint64_t dep_reg1= NULL, std::uint64_t dep_reg2 = NULL) {
++        leaks_.emplace_back(Leak{std::move(loc), value, dep_reg1,dep_reg2});
++    }
++
++    void print_leaks(std::ostream& File) const {
++        File << "Leakage:\n";
++        for (const auto& l : leaks_) {
++            File << "  Leak: " << l.loc << ' '
++               << std::showbase << std::hex << std::uppercase << l.value
++               << std::dec << '\n';
++        //     save_dependency(l.dep_reg);
++        }
++    }
++
++    void delete_leak() noexcept { leaks_.clear(); }
++    std::size_t size() const noexcept { return leaks_.size(); }
++    bool delete_all_leaks() const noexcept { return leaks_.empty(); }
++
++    std::deque<Leak> leaks() const noexcept { return leaks_; }
++    // const std::deque<Leak>& leaks() const noexcept { return leaks_; }
++
++private:
++    std::deque<Leak> leaks_; 
++};
++
++void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, processor_t *p);
++
++#endif
+\ No newline at end of file
+diff --git a/riscv/mmu.cc b/riscv/mmu.cc
+index b080697e..0363c169 100644
+--- a/riscv/mmu.cc
++++ b/riscv/mmu.cc
+@@ -64,7 +64,7 @@ reg_t mmu_t::translate(mem_access_info_t access_info, reg_t len)
+ 
+   reg_t paddr = walk(access_info) | (addr & (PGSIZE-1));
+   if (!pmp_ok(paddr, len, access_info.flags.ss_access ? STORE : type, mode, access_info.flags.hlvx))
+-    throw_access_exception(virt, addr, access_info.flags.ss_access ? STORE : type);
++    throw_access_exception(virt, addr, access_info.flags.ss_access ? STORE : type); //M:: excp
+   return paddr;
+ }
+ 
+@@ -74,8 +74,9 @@ inline mmu_t::insn_parcel_t mmu_t::perform_intrapage_fetch(reg_t vaddr, uintptr_
+ 
+   if (host_addr)
+     memcpy(&res, (char*)host_addr, sizeof(res));
+-  else if (!mmio_fetch(paddr, sizeof(res), (uint8_t*)&res))
++  else if (!mmio_fetch(paddr, sizeof(res), (uint8_t*)&res)){
+     throw trap_instruction_access_fault(proc->state.v, vaddr, 0, 0);
++  }
+ 
+   return res;
+ }
+@@ -98,7 +99,7 @@ mmu_t::insn_parcel_t mmu_t::fetch_slow_path(reg_t vaddr)
+   check_triggers(triggers::OPERATION_EXECUTE, vaddr, access_info.effective_virt);
+ 
+   if (!tlb_hit) {
+-    paddr = translate(access_info, sizeof(insn_parcel_t));
++    paddr = translate(access_info, sizeof(insn_parcel_t)); //M:: excp
+     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
+ 
+     refill_tlb(vaddr, paddr, (char*)host_addr, FETCH);
+@@ -215,10 +216,12 @@ inline void mmu_t::perform_intrapage_load(reg_t vaddr, uintptr_t host_addr, reg_
+     memcpy(bytes, (char*)host_addr, len);
+   } else if (!mmio_load(paddr, len, bytes)) {
+     auto access_info = generate_access_info(vaddr, LOAD, xlate_flags);
+-    if (access_info.flags.ss_access)
++    if (access_info.flags.ss_access){
+       throw trap_store_access_fault(access_info.effective_virt, access_info.transformed_vaddr, 0, 0);
+-    else
++    }
++    else{
+       throw trap_load_access_fault(access_info.effective_virt, access_info.transformed_vaddr, 0, 0);
++    }
+   }
+ 
+   if (tracer.interested_in_range(paddr, paddr + len, LOAD))
+@@ -230,7 +233,7 @@ void mmu_t::load_slow_path_intrapage(reg_t len, uint8_t* bytes, mem_access_info_
+   reg_t vaddr = access_info.vaddr;
+   auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_load, vaddr, TLB_FLAGS);
+   if (!tlb_hit || access_info.flags.is_special_access()) {
+-    paddr = translate(access_info, len);
++    paddr = translate(access_info, len); //M:: excp
+     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
+ 
+     if (!access_info.flags.is_special_access())
+@@ -269,11 +272,13 @@ void mmu_t::load_slow_path(reg_t original_addr, reg_t len, uint8_t* bytes, xlate
+     load_slow_path_intrapage(len, bytes, access_info);
+   } else {
+     bool gva = access_info.effective_virt;
+-    if (!is_misaligned_enabled())
++    if (!is_misaligned_enabled()){
+       throw trap_load_address_misaligned(gva, transformed_addr, 0, 0);
++    }
+ 
+-    if (access_info.flags.lr)
++    if (access_info.flags.lr){
+       throw trap_load_access_fault(gva, transformed_addr, 0, 0);
++    }
+ 
+     reg_t len_page0 = std::min(len, PGSIZE - transformed_addr % PGSIZE);
+     load_slow_path_intrapage(len_page0, bytes, access_info);
+@@ -312,7 +317,7 @@ void mmu_t::store_slow_path_intrapage(reg_t len, const uint8_t* bytes, mem_acces
+   reg_t vaddr = access_info.vaddr;
+   auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_store, vaddr, TLB_FLAGS);
+   if (!tlb_hit || access_info.flags.is_special_access()) {
+-    paddr = translate(access_info, len);
++    paddr = translate(access_info, len); //M:: excp
+     host_addr = (uintptr_t)sim->addr_to_mem(paddr);
+ 
+     if (!access_info.flags.is_special_access())
+@@ -353,11 +358,13 @@ void mmu_t::store_slow_path(reg_t original_addr, reg_t len, const uint8_t* bytes
+ 
+   if (transformed_addr & (len - 1)) {
+     bool gva = access_info.effective_virt;
+-    if (!is_misaligned_enabled())
++    if (!is_misaligned_enabled()){
+       throw trap_store_address_misaligned(gva, transformed_addr, 0, 0);
++    }
+ 
+-    if (require_alignment)
++    if (require_alignment){
+       throw trap_store_access_fault(gva, transformed_addr, 0, 0);
++    }
+ 
+     reg_t len_page0 = std::min(len, PGSIZE - transformed_addr % PGSIZE);
+     store_slow_path_intrapage(len_page0, bytes, access_info, actually_store);
+@@ -369,18 +376,8 @@ void mmu_t::store_slow_path(reg_t original_addr, reg_t len, const uint8_t* bytes
+     store_slow_path_intrapage(len, bytes, access_info, actually_store);
+   }
+ 
+-  if (actually_store && proc && unlikely(proc->get_log_commits_enabled())) {
+-    // amocas.q sends len == 16, reg_from_bytes only supports up to 8
+-    // bytes per conversion.  Make multiple entries in the log
+-    reg_t offset = 0;
+-    const auto reg_size = sizeof(reg_t);
+-    while (unlikely(len > reg_size)) {
+-      proc->state.log_mem_write.push_back(std::make_tuple(original_addr + offset, reg_from_bytes(reg_size, bytes + offset), reg_size));
+-      offset += reg_size;
+-      len -= reg_size;
+-    }
+-    proc->state.log_mem_write.push_back(std::make_tuple(original_addr + offset, reg_from_bytes(len, bytes + offset), len));
+-  }
++  if (actually_store && proc && unlikely(proc->get_log_commits_enabled()))
++    proc->state.log_mem_write.push_back(std::make_tuple(original_addr, reg_from_bytes(len, bytes), len));
+ }
+ 
+ tlb_entry_t mmu_t::refill_tlb(reg_t vaddr, reg_t paddr, char* host_addr, access_type type)
+@@ -552,9 +549,12 @@ reg_t mmu_t::s2xlate(reg_t gva, reg_t gpa, access_type type, access_type trap_ty
+   }
+ 
+   switch (trap_type) {
+-    case FETCH: throw trap_instruction_guest_page_fault(gva, gpa >> 2, tinst);
+-    case LOAD: throw trap_load_guest_page_fault(gva, gpa >> 2, tinst);
+-    case STORE: throw trap_store_guest_page_fault(gva, gpa >> 2, tinst);
++    case FETCH:   
++      throw trap_instruction_guest_page_fault(gva, gpa >> 2, tinst);
++    case LOAD: 
++      throw trap_load_guest_page_fault(gva, gpa >> 2, tinst);
++    case STORE:
++      throw trap_store_guest_page_fault(gva, gpa >> 2, tinst);
+     default: abort();
+   }
+ }
+@@ -573,8 +573,9 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
+   bool ss_access = access_info.flags.ss_access;
+ 
+   if (ss_access) {
+-    if (vm.levels == 0)
++    if (vm.levels == 0){
+       throw trap_store_access_fault(virt, addr, 0, 0);
++    }
+     type = STORE;
+   }
+ 
+@@ -672,9 +673,12 @@ reg_t mmu_t::walk(mem_access_info_t access_info)
+   }
+ 
+   switch (type) {
+-    case FETCH: throw trap_instruction_page_fault(virt, addr, 0, 0);
+-    case LOAD: throw trap_load_page_fault(virt, addr, 0, 0);
+-    case STORE: throw trap_store_page_fault(virt, addr, 0, 0);
++    case FETCH:
++      throw trap_instruction_page_fault(virt, addr, 0, 0);
++    case LOAD: 
++      throw trap_load_page_fault(virt, addr, 0, 0);
++    case STORE:
++      throw trap_store_page_fault(virt, addr, 0, 0);
+     default: abort();
+   }
+ }
+diff --git a/riscv/mmu.h b/riscv/mmu.h
+index 48340cfa..1e7bda6a 100644
+--- a/riscv/mmu.h
++++ b/riscv/mmu.h
+@@ -18,6 +18,7 @@
+ // virtual memory configuration
+ #define PGSHIFT 12
+ const reg_t PGSIZE = 1 << PGSHIFT;
++#define MAX_PADDR_BITS 64
+ 
+ // observability hooks for load, store and fetch
+ // intentionally empty not to cause runtime overhead
+@@ -34,10 +35,10 @@ const reg_t PGSIZE = 1 << PGSHIFT;
+ #define MMU_OBSERVE_STORE(addr, data, length)
+ #endif
+ 
+-struct insn_fetch_t
++struct insn_fetch_t //M:: inst DS
+ {
+   insn_func_t func;
+-  insn_t insn;
++  insn_t insn; //M:: using its methods we can get instruction fields
+ };
+ 
+ struct icache_entry_t {
+@@ -126,8 +127,9 @@ public:
+   // shadow stack load
+   template<typename T>
+   T ss_load(reg_t addr) {
+-    if ((addr & (sizeof(T) - 1)) != 0)
++    if ((addr & (sizeof(T) - 1)) != 0){
+       throw trap_store_access_fault((proc) ? proc->state.v : false, addr, 0, 0);
++    }
+     return load<T>(addr, {.forced_virt=false, .hlvx=false, .lr=false, .ss_access=true});
+   }
+ 
+@@ -153,8 +155,9 @@ public:
+   // shadow stack store
+   template<typename T>
+   void ss_store(reg_t addr, T val) {
+-    if ((addr & (sizeof(T) - 1)) != 0)
++    if ((addr & (sizeof(T) - 1)) != 0){
+       throw trap_store_access_fault((proc) ? proc->state.v : false, addr, 0, 0);
++    }
+     store<T>(addr, val, {.forced_virt=false, .hlvx=false, .lr=false, .ss_access=true});
+   }
+ 
+@@ -162,8 +165,8 @@ public:
+   #define convert_load_traps_to_store_traps(BODY) \
+     try { \
+       BODY \
+-    } catch (trap_load_address_misaligned& t) { \
+       /* Misaligned fault will not be triggered by Zicbom */ \
++    } catch (trap_load_address_misaligned& t) { \
+       throw trap_store_address_misaligned(t.has_gva(), t.get_tval(), t.get_tval2(), t.get_tinst()); \
+     } catch (trap_load_page_fault& t) { \
+       throw trap_store_page_fault(t.has_gva(), t.get_tval(), t.get_tval2(), t.get_tinst()); \
+@@ -172,7 +175,6 @@ public:
+     } catch (trap_load_guest_page_fault& t) { \
+       throw trap_store_guest_page_fault(t.get_tval(), t.get_tval2(), t.get_tinst()); \
+     }
+-
+   // template for functions that perform an atomic memory operation
+   template<typename T, typename op>
+   T amo(reg_t addr, op f) {
+@@ -274,8 +276,9 @@ public:
+     reg_t paddr = translate(generate_access_info(vaddr, STORE, {}), 1);
+     if (sim->reservable(paddr))
+       return load_reservation_address == paddr;
+-    else
++    else{
+       throw trap_store_access_fault((proc) ? proc->state.v : false, vaddr, 0, 0);
++    }
+   }
+ 
+   template<typename T>
+@@ -308,7 +311,7 @@ public:
+     return target_big_endian ? to_be(res) : res;
+   }
+ 
+-  inline icache_entry_t* refill_icache(reg_t addr, icache_entry_t* entry)
++  inline icache_entry_t* refill_icache(reg_t addr, icache_entry_t* entry) //M:: Fetching excp
+   {
+     insn_bits_t insn = fetch_insn_parcel(addr);
+ 
+@@ -328,7 +331,7 @@ public:
+       insn |= (insn_bits_t)fetch_insn_parcel(addr + 6) << 48;
+     }
+ 
+-    insn_fetch_t fetch = {proc->decode_insn(insn), insn};
++    insn_fetch_t fetch = {proc->decode_insn(insn), insn}; //M:: fetched data is decoded here
+     entry->tag = addr;
+     entry->next = &icache[icache_index(addr + length)];
+     entry->data = fetch;
+@@ -354,10 +357,10 @@ public:
+     return refill_icache(addr, entry);
+   }
+ 
+-  inline insn_fetch_t load_insn(reg_t addr)
++  inline insn_fetch_t load_insn(reg_t addr) //M:: fetch instruction from icache
+   {
+     icache_entry_t entry;
+-    return refill_icache(addr, &entry)->data;
++    return refill_icache(addr, &entry)->data; //M:: getting instruction from icache
+   }
+ 
+   std::tuple<bool, uintptr_t, reg_t> ALWAYS_INLINE access_tlb(const dtlb_entry_t* tlb, reg_t vaddr, reg_t allowed_flags = 0, reg_t required_flags = 0)
+@@ -373,7 +376,7 @@ public:
+ 
+   void flush_tlb();
+   void flush_icache();
+-
++  
+   void register_memtracer(memtracer_t*);
+ 
+   int is_misaligned_enabled()
+@@ -496,7 +499,7 @@ private:
+     }
+   }
+ 
+-  inline insn_parcel_t fetch_insn_parcel(reg_t addr) {
++  inline insn_parcel_t fetch_insn_parcel(reg_t addr) { //M:: Fetch excp
+     if (auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_insn, addr); tlb_hit)
+       return from_le(*(insn_parcel_t*)host_addr);
+ 
+@@ -507,7 +510,7 @@ private:
+   {
+     return proc != nullptr
+            && !(proc->state.mnstatus && !get_field(proc->state.mnstatus->read(), MNSTATUS_NMIE))
+-           && (!proc->state.debug_mode || get_field(proc->state.dcsr->read(), DCSR_MPRVEN))
++           && !proc->state.debug_mode
+            && get_field(proc->state.mstatus->read(), MSTATUS_MPRV);
+   }
+ 
+diff --git a/riscv/ns16550.cc b/riscv/ns16550.cc
+index 4ae9dbe5..15e08733 100644
+--- a/riscv/ns16550.cc
++++ b/riscv/ns16550.cc
+@@ -93,8 +93,8 @@ void ns16550_t::update_interrupt(void)
+   uint8_t interrupts = 0;
+ 
+   /* Handle clear rx */
+-  if (fcr & UART_FCR_CLEAR_RCVR) {
+-    fcr &= ~UART_FCR_CLEAR_RCVR;
++  if (lcr & UART_FCR_CLEAR_RCVR) {
++    lcr &= ~UART_FCR_CLEAR_RCVR;
+     while (!rx_queue.empty()) {
+       rx_queue.pop();
+     }
+@@ -102,8 +102,8 @@ void ns16550_t::update_interrupt(void)
+   }
+ 
+   /* Handle clear tx */
+-  if (fcr & UART_FCR_CLEAR_XMIT) {
+-    fcr &= ~UART_FCR_CLEAR_XMIT;
++  if (lcr & UART_FCR_CLEAR_XMIT) {
++    lcr &= ~UART_FCR_CLEAR_XMIT;
+     lsr |= UART_LSR_TEMT | UART_LSR_THRE;
+   }
+ 
+@@ -361,4 +361,4 @@ ns16550_t* ns16550_parse_from_fdt(const void* fdt, const sim_t* sim, reg_t* base
+   }
+ }
+ 
+-REGISTER_BUILTIN_DEVICE(ns16550, ns16550_parse_from_fdt, ns16550_generate_dts)
++REGISTER_DEVICE(ns16550, ns16550_parse_from_fdt, ns16550_generate_dts)
+diff --git a/riscv/opcodes.h b/riscv/opcodes.h
+index 065934a2..821a9365 100644
+--- a/riscv/opcodes.h
++++ b/riscv/opcodes.h
+@@ -5,6 +5,9 @@
+ #define S0      8
+ #define S1      9
+ 
++
++//M:: anything to do with .h files
++
+ static uint32_t bits(uint32_t value, unsigned int hi, unsigned int lo) {
+   return (value >> lo) & ((1 << (hi+1-lo)) - 1);
+ }
+diff --git a/riscv/platform.h b/riscv/platform.h
+index c8a5bf4b..51cc7400 100644
+--- a/riscv/platform.h
++++ b/riscv/platform.h
+@@ -1,4 +1,6 @@
+ // See LICENSE for license details.
++#include <stdio.h>
++#include <fstream>
+ #ifndef _RISCV_PLATFORM_H
+ #define _RISCV_PLATFORM_H
+ 
+@@ -19,5 +21,18 @@
+ #define NS16550_INTERRUPT_ID 1
+ #define EXT_IO_BASE        0x40000000
+ #define DRAM_BASE          0x80000000
++#define DEFAULT_CTR        "top"
++
++extern uint64_t contract;
++// extern FILE * leak_out;
++extern std::ofstream leak_out;
++extern std::ofstream dep_out;
++
++#define SEQ_CT 0
++#define SEQ_ARCH 1
++#define SEQ_BM 2
++#define SEQ_CT_B 3
++#define TOP 4
++
+ 
+ #endif
+diff --git a/riscv/plic.cc b/riscv/plic.cc
+index 03105385..b6d204b2 100644
+--- a/riscv/plic.cc
++++ b/riscv/plic.cc
+@@ -436,4 +436,4 @@ plic_t* plic_parse_from_fdt(const void* fdt, const sim_t* sim, reg_t* base, cons
+     return nullptr;
+ }
+ 
+-REGISTER_BUILTIN_DEVICE(plic, plic_parse_from_fdt, plic_generate_dts)
++REGISTER_DEVICE(plic, plic_parse_from_fdt, plic_generate_dts)
+diff --git a/riscv/processor.cc b/riscv/processor.cc
+index 6d914f03..efddf3dd 100644
+--- a/riscv/processor.cc
++++ b/riscv/processor.cc
+@@ -62,7 +62,7 @@ processor_t::processor_t(const char* isa_str, const char* priv_str,
+   VU.vlenb = isa.get_vlen() / 8;
+   VU.vstart_alu = 0;
+ 
+-  register_base_instructions();
++  register_base_instructions(); //M::
+   mmu = new mmu_t(sim, cfg->endianness, this, cfg->cache_blocksz);
+ 
+   disassembler = new disassembler_t(&isa);
+@@ -272,19 +272,45 @@ reg_t processor_t::select_an_interrupt_with_default_priority(reg_t enabled_inter
+   return enabled_interrupts;
+ }
+ 
++bool processor_t::is_handled_in_vs()
++{
++  reg_t pending_interrupts = state.mip->read() & state.mie->read();
++
++  const reg_t s_pending_interrupts = state.nonvirtual_sip->read() & state.nonvirtual_sie->read();
++  const reg_t vstopi = state.vstopi->read();
++  const reg_t vs_pending_interrupt = vstopi ? (reg_t(1) << get_field(vstopi, MTOPI_IID)) : 0; // SSIP -> VSSIP, etc
++
++  // M-ints have higher priority over HS-ints and VS-ints
++  const reg_t mie = get_field(state.mstatus->read(), MSTATUS_MIE);
++  const reg_t m_enabled = state.prv < PRV_M || (state.prv == PRV_M && mie);
++  reg_t enabled_interrupts = pending_interrupts & ~state.mideleg->read() & -m_enabled;
++  if (enabled_interrupts == 0) {
++    // HS-ints have higher priority over VS-ints
++    const reg_t deleg_to_hs = state.mideleg->read() & ~state.hideleg->read();
++    const reg_t sie = get_field(state.sstatus->read(), MSTATUS_SIE);
++    const reg_t hs_enabled = state.v || state.prv < PRV_S || (state.prv == PRV_S && sie);
++    enabled_interrupts = ((pending_interrupts & deleg_to_hs) | (s_pending_interrupts & ~state.hideleg->read())) & -hs_enabled;
++    if (state.v && enabled_interrupts == 0) {
++      // VS-ints have least priority and can only be taken with virt enabled
++      const reg_t vs_enabled = state.prv < PRV_S || (state.prv == PRV_S && sie);
++      enabled_interrupts = vs_pending_interrupt & -vs_enabled;
++      if (enabled_interrupts)
++        return true;
++    }
++  }
++  return false;
++}
++
+ void processor_t::take_interrupt(reg_t pending_interrupts)
+ {
+   reg_t s_pending_interrupts = 0;
+   reg_t vstopi = 0;
+   reg_t vs_pending_interrupt = 0;
+ 
+-  if (extension_enabled_const(EXT_SSAIA)) {
++  if (extension_enable_table[EXT_SSAIA]) {
+     s_pending_interrupts = state.nonvirtual_sip->read() & state.nonvirtual_sie->read();
+     vstopi = state.vstopi->read();
+-    // Legacy VS interrupts (VSEIP/VSTIP/VSSIP) come in through pending_interrupts but are shifted
+-    // down 1 in vstopi. AIA-extended and VTI are not shifted. Clear S bits (VS shifted down by 1).
+     vs_pending_interrupt = vstopi ? (reg_t(1) << get_field(vstopi, MTOPI_IID)) : 0;
+-    vs_pending_interrupt &= ~MIP_S_MASK;
+   }
+ 
+   // Do nothing if no pending interrupts
+@@ -307,15 +333,15 @@ void processor_t::take_interrupt(reg_t pending_interrupts)
+     enabled_interrupts = ((pending_interrupts & deleg_to_hs) | (s_pending_interrupts & ~state.hideleg->read())) & -hs_enabled;
+     if (state.v && enabled_interrupts == 0) {
+       // VS-ints have least priority and can only be taken with virt enabled
+-      const reg_t deleg_to_vs = state.hideleg->read();
+       const reg_t vs_enabled = state.prv < PRV_S || (state.prv == PRV_S && sie);
+-      enabled_interrupts = ((pending_interrupts & deleg_to_vs) | vs_pending_interrupt) & -vs_enabled;
++      enabled_interrupts = vs_pending_interrupt & -vs_enabled;
+     }
+   }
+ 
+   const bool nmie = !(state.mnstatus && !get_field(state.mnstatus->read(), MNSTATUS_NMIE));
+   if (!state.debug_mode && nmie && enabled_interrupts) {
+     reg_t selected_interrupt = select_an_interrupt_with_default_priority(enabled_interrupts);
++
+     if (check_triggers_icount) TM.detect_icount_match();
+     throw trap_t(((reg_t)1 << (isa.get_max_xlen() - 1)) | ctz(selected_interrupt));
+   }
+@@ -389,6 +415,32 @@ void processor_t::debug_output_log(std::stringstream *s)
+ 
+ void processor_t::take_trap(trap_t& t, reg_t epc)
+ {
++  auto cause = t.cause();
++  auto nm = t.name();    
++  auto tv  = t.get_tval();
++
++  std::cout << "code: "<< cause << "\n";
++
++  if  (cause == CAUSE_MISALIGNED_FETCH ||
++       cause == CAUSE_FETCH_ACCESS || cause == CAUSE_ILLEGAL_INSTRUCTION ||
++       cause == CAUSE_MISALIGNED_LOAD ||
++       cause == CAUSE_LOAD_ACCESS || cause == CAUSE_MISALIGNED_STORE ||
++       cause == CAUSE_STORE_ACCESS || cause == CAUSE_FETCH_PAGE_FAULT ||
++       cause == CAUSE_LOAD_PAGE_FAULT || cause == CAUSE_STORE_PAGE_FAULT ||
++       cause == CAUSE_DOUBLE_TRAP || cause == CAUSE_SOFTWARE_CHECK_FAULT || 
++       cause == CAUSE_FETCH_GUEST_PAGE_FAULT || cause == CAUSE_LOAD_GUEST_PAGE_FAULT ||
++       cause == CAUSE_STORE_GUEST_PAGE_FAULT || cause == CAUSE_VIRTUAL_INSTRUCTION)
++  {
++
++    std::cerr << "Exception " << nm
++    << " cause=0x" << std::hex << cause
++    << " tval=0x" << tv
++    << " at priv " << (int)state.prv
++    << "\n";
++
++    std::exit(-1);
++
++  }
+   unsigned max_xlen = isa.get_max_xlen();
+ 
+   if (debug) {
+@@ -421,6 +473,7 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
+   bool supv_double_trap = false;
+   if (interrupt) {
+     vsdeleg = (curr_virt && state.prv <= PRV_S) ? state.hideleg->read() : 0;
++    vsdeleg >>= 1;
+     hsdeleg = (state.prv <= PRV_S) ? (state.mideleg->read() | state.nonvirtual_sip->read()) : 0;
+     bit &= ~((reg_t)1 << (max_xlen - 1));
+   } else {
+@@ -438,17 +491,9 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
+     if (supv_double_trap)
+       vsdeleg = hsdeleg = 0;
+   }
+-  bool vti = false;
+-  if (extension_enabled_const(EXT_SSAIA)) {
+-    const reg_t hvictl = state.csrmap[CSR_HVICTL]->read();
+-    const reg_t iid = get_field(hvictl, HVICTL_IID);
+-    // It is possible that hvictl is injecting VSEIP (10) and hvictl.DPR is causing mip.VSEIP to be picked over VTI.
+-    // Check vstopi == hvictl.iid
+-    vti = (hvictl & HVICTL_VTI) && iid != IRQ_S_EXT && iid == bit && get_field(state.vstopi->read(), MTOPI_IID) == iid;
+-  }
+-  if ((state.prv <= PRV_S && bit < max_xlen && ((vsdeleg >> bit) & 1)) || vti) {
++  if ((state.prv <= PRV_S && bit < max_xlen && ((vsdeleg >> bit) & 1)) || (state.v && interrupt && is_handled_in_vs())) {
+     // Handle the trap in VS-mode
+-    const reg_t adjusted_cause = interrupt && bit <= IRQ_VS_EXT && !vti ? bit - 1 : bit;  // VSSIP -> SSIP, etc;
++    const reg_t adjusted_cause = bit;
+     reg_t vector = (state.vstvec->read() & 1) && interrupt ? 4 * adjusted_cause : 0;
+     state.pc = (state.vstvec->read() & ~(reg_t)1) + vector;
+     state.vscause->write(adjusted_cause | (interrupt ? interrupt_bit : 0));
+@@ -607,6 +652,13 @@ void processor_t::disasm(insn_t insn)
+   }
+ }
+ 
++int processor_t::paddr_bits()
++{
++  unsigned max_xlen = isa.get_max_xlen();
++  assert(xlen == max_xlen);
++  return max_xlen == 64 ? 50 : 34;
++}
++
+ void processor_t::put_csr(int which, reg_t val)
+ {
+   val = zext_xlen(val);
+@@ -647,7 +699,7 @@ reg_t illegal_instruction(processor_t UNUSED *p, insn_t insn, reg_t UNUSED pc)
+   throw trap_illegal_instruction(insn.bits() & 0xffffffffULL);
+ }
+ 
+-insn_func_t processor_t::decode_insn(insn_t insn)
++insn_func_t processor_t::decode_insn(insn_t insn) //M:: decodeing here
+ {
+   // look up opcode in hash table
+   size_t idx = insn.bits() % OPCODE_CACHE_SIZE;
+@@ -703,7 +755,7 @@ void processor_t::register_extension(extension_t *x) {
+   }
+ }
+ 
+-void processor_t::register_base_instructions()
++void processor_t::register_base_instructions() //M:: 
+ {
+   #define DECLARE_INSN(name, match, mask) \
+     insn_bits_t name##_match = (match), name##_mask = (mask); \
+@@ -722,7 +774,7 @@ void processor_t::register_base_instructions()
+     extern reg_t logged_rv64i_##name(processor_t*, insn_t, reg_t); \
+     extern reg_t logged_rv32e_##name(processor_t*, insn_t, reg_t); \
+     extern reg_t logged_rv64e_##name(processor_t*, insn_t, reg_t);
+-  #include "insn_list.h"
++  #include "insn_list.h" //M:: where is this?:/
+   #undef DEFINE_INSN
+ 
+   #define DEFINE_INSN_UNCOND(name) { \
+diff --git a/riscv/processor.h b/riscv/processor.h
+index 4ca3ce73..602bdc8c 100644
+--- a/riscv/processor.h
++++ b/riscv/processor.h
+@@ -68,7 +68,8 @@ typedef std::map<reg_t, freg_t> commit_log_reg_t;
+ typedef std::vector<std::tuple<reg_t, uint64_t, uint8_t>> commit_log_mem_t;
+ 
+ // architectural state of a RISC-V hart
+-struct state_t
++//M:: probable start point for cnotract log
++struct state_t //M:: maybe a method here for ctr log for desired insts
+ {
+   void add_ireg_proxy(processor_t* const proc, sscsrind_reg_csr_t::sscsrind_reg_csr_t_p ireg);
+   void reset(processor_t* const proc, reg_t max_isa);
+@@ -191,6 +192,7 @@ struct state_t
+       STEP_STEPPED
+   } single_step;
+ 
++  //M:: use these logs
+   commit_log_reg_t log_reg_write;
+   commit_log_mem_t log_mem_read;
+   commit_log_mem_t log_mem_write;
+@@ -273,7 +275,6 @@ public:
+   mmu_t* get_mmu() { return mmu; }
+   state_t* get_state() { return &state; }
+   unsigned get_xlen() const { return xlen; }
+-  unsigned paddr_bits() { return isa.get_max_xlen() == 64 ? 56 : 34; }
+   unsigned get_const_xlen() const {
+     // Any code that assumes a const xlen should use this method to
+     // document that assumption. If Spike ever changes to allow
+@@ -331,8 +332,9 @@ public:
+     return ~(reg_t)(ialign == 16 ? 0 : 2);
+   }
+   void check_pc_alignment(reg_t pc) {
+-    if (unlikely(pc & ~pc_alignment_mask()))
++    if (unlikely(pc & ~pc_alignment_mask())){
+       throw trap_instruction_address_misaligned(state.v, pc, 0, 0);
++    }
+   }
+   reg_t legalize_privilege(reg_t);
+   void set_privilege(reg_t, bool);
+@@ -416,12 +418,14 @@ private:
+   unsigned ziccid_flush_count = 0;
+   static const unsigned ZICCID_FLUSH_PERIOD = 10;
+ 
++  bool is_handled_in_vs();
+   void take_pending_interrupt() { take_interrupt(state.mip->read() & state.mie->read()); }
+   void take_interrupt(reg_t mask); // take first enabled interrupt in mask
+   void take_trap(trap_t& t, reg_t epc); // take an exception
+   void take_trigger_action(triggers::action_t action, reg_t breakpoint_tval, reg_t epc, bool virt);
+   void disasm(insn_t insn); // disassemble and print an instruction
+   void register_insn(insn_desc_t, bool);
++  int paddr_bits();
+ 
+   void enter_debug_mode(uint8_t cause, uint8_t ext_cause);
+ 
+diff --git a/riscv/riscv.mk.in b/riscv/riscv.mk.in
+index ab683357..be9ae420 100644
+--- a/riscv/riscv.mk.in
++++ b/riscv/riscv.mk.in
+@@ -33,13 +33,11 @@ riscv_install_hdrs = \
+ 	entropy_source.h \
+ 	extension.h \
+ 	isa_parser.h \
+-	jtag_dtm.h \
+ 	log_file.h \
+ 	memtracer.h \
+ 	mmu.h \
+ 	platform.h \
+ 	processor.h \
+-	remote_bitbang.h \
+ 	rocc.h \
+ 	sim.h \
+ 	simif.h \
+@@ -53,6 +51,8 @@ riscv_precompiled_hdrs = \
+ riscv_srcs = \
+ 	processor.cc \
+ 	execute.cc \
++	leakage.cc \
++	dep.cc \
+ 	dts.cc \
+ 	sim.cc \
+ 	interactive.cc \
+@@ -1074,12 +1074,6 @@ riscv_insn_ext_zvksh = \
+ 	vsm3c_vi \
+ 	vsm3me_vv \
+ 
+-riscv_insn_ext_zvbdot = \
+-	vqbdotu_vv \
+-	vqbdots_vv \
+-	vfwbdot_vv \
+-	vfbdot_vv \
+-
+ riscv_insn_ext_zimop = \
+ 	mop_r_N \
+ 	mop_rr_N \
+@@ -1136,7 +1130,6 @@ riscv_insn_list = \
+ 	$(riscv_insn_ext_zfh_zfa) \
+ 	$(riscv_insn_ext_zicond) \
+ 	$(riscv_insn_ext_zvk) \
+-	$(riscv_insn_ext_zvbdot) \
+ 	$(riscv_insn_priv) \
+ 	$(riscv_insn_smrnmi) \
+ 	$(riscv_insn_svinval) \
+diff --git a/riscv/sim.cc b/riscv/sim.cc
+index fb643d6f..54f389af 100644
+--- a/riscv/sim.cc
++++ b/riscv/sim.cc
+@@ -118,8 +118,8 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
+   // particular, the default device tree configuration that you get without
+   // setting the dtb_file argument has one.
+   std::vector<device_factory_sargs_t> device_factories = {
+-    {clint_factory, {}},
+-    {plic_factory, {}},
++    {clint_factory, {}}, // clint must be element 0
++    {plic_factory, {}}, // plic must be element 1
+     {ns16550_factory, {}}};
+   device_factories.insert(device_factories.end(),
+                           plugin_device_factories.begin(),
+@@ -253,15 +253,10 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
+       std::shared_ptr<abstract_device_t> dev_ptr(device);
+       add_device(device_base, dev_ptr);
+ 
+-      if (dynamic_cast<clint_t*>(&*dev_ptr)) {
+-        assert(!clint);
++      if (i == 0) // clint_factory
+         clint = std::static_pointer_cast<clint_t>(dev_ptr);
+-      }
+-
+-      if (dynamic_cast<plic_t*>(&*dev_ptr)) {
+-        assert(!plic);
++      else if (i == 1) // plic_factory
+         plic = std::static_pointer_cast<plic_t>(dev_ptr);
+-      }
+     }
+   }
+ }
+@@ -273,7 +268,7 @@ sim_t::~sim_t()
+   delete debug_mmu;
+ }
+ 
+-int sim_t::run()
++int sim_t::run() //M:: run is here
+ {
+   if (!debug && log)
+     set_procs_debug(true);
+@@ -342,16 +337,22 @@ void sim_t::set_procs_debug(bool value)
+     procs[i]->set_debug(value);
+ }
+ 
++static bool paddr_ok(reg_t addr)
++{
++  static_assert(MAX_PADDR_BITS == 8 * sizeof(addr));
++  return true;
++}
++
+ bool sim_t::mmio_load(reg_t paddr, size_t len, uint8_t* bytes)
+ {
+-  if (paddr + len < paddr)
++  if (paddr + len < paddr || !paddr_ok(paddr + len - 1))
+     return false;
+   return bus.load(paddr, len, bytes);
+ }
+ 
+ bool sim_t::mmio_store(reg_t paddr, size_t len, const uint8_t* bytes)
+ {
+-  if (paddr + len < paddr)
++  if (paddr + len < paddr || !paddr_ok(paddr + len - 1))
+     return false;
+   return bus.store(paddr, len, bytes);
+ }
+@@ -402,6 +403,8 @@ void sim_t::set_rom()
+ }
+ 
+ char* sim_t::addr_to_mem(reg_t paddr) {
++  if (!paddr_ok(paddr))
++    return NULL;
+   auto desc = bus.find_device(paddr >> PGSHIFT << PGSHIFT, PGSIZE);
+   if (auto mem = dynamic_cast<abstract_mem_t*>(desc.second))
+     return mem->contents(paddr - desc.first);
+@@ -421,7 +424,7 @@ void sim_t::reset()
+     set_rom();
+ }
+ 
+-void sim_t::idle()
++void sim_t::idle() //M:: strat using step
+ {
+   if (done())
+     return;
+@@ -432,7 +435,7 @@ void sim_t::idle()
+     if (instruction_limit.has_value()) {
+       if (*instruction_limit < INTERLEAVE) {
+         // Final step.
+-        step(*instruction_limit);
++        step(*instruction_limit); //M:: using step
+         htif_exit(0);
+         *instruction_limit = 0;
+         return;
+diff --git a/riscv/trap.h b/riscv/trap.h
+index 5ea56e24..c3075661 100644
+--- a/riscv/trap.h
++++ b/riscv/trap.h
+@@ -100,18 +100,18 @@ class mem_trap_t : public trap_t
+   std::string name() { return "trap_"#x; } \
+ };
+ 
+-DECLARE_MEM_TRAP(CAUSE_MISALIGNED_FETCH, instruction_address_misaligned)
+-DECLARE_MEM_TRAP(CAUSE_FETCH_ACCESS, instruction_access_fault)
+-DECLARE_INST_TRAP(CAUSE_ILLEGAL_INSTRUCTION, illegal_instruction)
+-DECLARE_INST_WITH_GVA_TRAP(CAUSE_BREAKPOINT, breakpoint)
+-DECLARE_MEM_TRAP(CAUSE_MISALIGNED_LOAD, load_address_misaligned)
+-DECLARE_MEM_TRAP(CAUSE_MISALIGNED_STORE, store_address_misaligned)
+-DECLARE_MEM_TRAP(CAUSE_LOAD_ACCESS, load_access_fault)
+-DECLARE_MEM_TRAP(CAUSE_STORE_ACCESS, store_access_fault)
+-DECLARE_TRAP(CAUSE_USER_ECALL, user_ecall)
+-DECLARE_TRAP(CAUSE_SUPERVISOR_ECALL, supervisor_ecall)
+-DECLARE_TRAP(CAUSE_VIRTUAL_SUPERVISOR_ECALL, virtual_supervisor_ecall)
+-DECLARE_TRAP(CAUSE_MACHINE_ECALL, machine_ecall)
++DECLARE_MEM_TRAP(CAUSE_MISALIGNED_FETCH, instruction_address_misaligned) 
++DECLARE_MEM_TRAP(CAUSE_FETCH_ACCESS, instruction_access_fault) 
++DECLARE_INST_TRAP(CAUSE_ILLEGAL_INSTRUCTION, illegal_instruction) 
++DECLARE_INST_WITH_GVA_TRAP(CAUSE_BREAKPOINT, breakpoint) // M:: not to be terminated exc 
++DECLARE_MEM_TRAP(CAUSE_MISALIGNED_LOAD, load_address_misaligned) 
++DECLARE_MEM_TRAP(CAUSE_MISALIGNED_STORE, store_address_misaligned) 
++DECLARE_MEM_TRAP(CAUSE_LOAD_ACCESS, load_access_fault) 
++DECLARE_MEM_TRAP(CAUSE_STORE_ACCESS, store_access_fault) 
++DECLARE_TRAP(CAUSE_USER_ECALL, user_ecall) // M:: not to be terminated exc
++DECLARE_TRAP(CAUSE_SUPERVISOR_ECALL, supervisor_ecall) // M:: not to be terminated exc
++DECLARE_TRAP(CAUSE_VIRTUAL_SUPERVISOR_ECALL, virtual_supervisor_ecall) // M:: not to be terminated exc
++DECLARE_TRAP(CAUSE_MACHINE_ECALL, machine_ecall) // M:: not to be terminated exc
+ DECLARE_MEM_TRAP(CAUSE_FETCH_PAGE_FAULT, instruction_page_fault)
+ DECLARE_MEM_TRAP(CAUSE_LOAD_PAGE_FAULT, load_page_fault)
+ DECLARE_MEM_TRAP(CAUSE_STORE_PAGE_FAULT, store_page_fault)
+@@ -120,6 +120,6 @@ DECLARE_MEM_GVA_TRAP(CAUSE_FETCH_GUEST_PAGE_FAULT, instruction_guest_page_fault)
+ DECLARE_MEM_GVA_TRAP(CAUSE_LOAD_GUEST_PAGE_FAULT, load_guest_page_fault)
+ DECLARE_INST_TRAP(CAUSE_VIRTUAL_INSTRUCTION, virtual_instruction)
+ DECLARE_MEM_GVA_TRAP(CAUSE_STORE_GUEST_PAGE_FAULT, store_guest_page_fault)
+-DECLARE_INST_TRAP(CAUSE_SOFTWARE_CHECK_FAULT, software_check)
++DECLARE_INST_TRAP(CAUSE_SOFTWARE_CHECK_FAULT, software_check)  // M:: not to be terminated exc
+ 
+ #endif
+diff --git a/riscv/v_ext_macros.h b/riscv/v_ext_macros.h
+index 86e6033f..1e33232d 100644
+--- a/riscv/v_ext_macros.h
++++ b/riscv/v_ext_macros.h
+@@ -4,7 +4,6 @@
+ #define _RISCV_V_EXT_MACROS_H
+ 
+ #include "vector_unit.h"
+-#include <functional>
+ 
+ //
+ // vector: masking skip helper
+@@ -2090,50 +2089,6 @@ VI_VX_ULOOP({ \
+       break; \
+   }
+ 
+-#define ZVBDOT_INIT(widen) \
+-  unsigned vd_eew = P.VU.vsew * (widen); \
+-  unsigned vd_emul = std::max(1U, unsigned((8 * vd_eew) / P.VU.VLEN)); \
+-  unsigned vs2 = insn.rs2() & ~7; \
+-  unsigned ci = (insn.rs2() & 7) * 8; \
+-  require_vector(true); \
+-  require(P.VU.vstart->read() == 0); \
+-  require(P.VU.vflmul == 1); \
+-  require(ci * vd_eew < P.VU.VLEN); \
+-  require_align(insn.rd(), vd_emul); \
+-  require_vm; \
+-  require_noover(insn.rd(), vd_emul, insn.rs1(), 1); \
+-  require_noover(insn.rd(), vd_emul, vs2, 8)
+-
+-template<typename a_t, typename b_t, typename c_t>
+-c_t generic_dot_product(const std::vector<a_t>& a, const std::vector<b_t>& b, c_t c, std::function<c_t(a_t, b_t, c_t)> macc)
+-{
+-  for (size_t i = 0; i < a.size(); i++)
+-    c = macc(a[i], b[i], c);
+-  return c;
+-}
+-
+-#define ZVBDOT_LOOP(a_t, b_t, c_t, dot) \
+-  for (reg_t idx = 0; idx < 8; idx++) { \
+-    reg_t i = ci + idx; \
+-    VI_LOOP_ELEMENT_SKIP(); \
+-    std::vector<a_t> a(P.VU.vl->read(), a_t()); \
+-    std::vector<b_t> b(P.VU.vl->read(), b_t()); \
+-    for (reg_t k = 0; k < a.size(); k++) { \
+-      a[k] = P.VU.elt<a_t>(insn.rs1(), k); \
+-      b[k] = P.VU.elt<b_t>(vs2 + idx, k); \
+-    } \
+-    auto& acc = P.VU.elt<c_t>(insn.rd(), i, true); \
+-    acc = dot(a, b, acc); \
+-  }
+-
+-#define ZVBDOT_GENERIC_LOOP(a_t, b_t, c_t, macc) \
+-  auto dot = std::bind(generic_dot_product<a_t, b_t, c_t>, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, macc); \
+-  ZVBDOT_LOOP(a_t, b_t, c_t, dot)
+-
+-#define ZVBDOT_SIMPLE_LOOP(a_t, b_t, c_t) \
+-  auto macc = [](auto a, auto b, auto c) { return c + decltype(c)(a) * decltype(c)(b); }; \
+-  ZVBDOT_GENERIC_LOOP(a_t, b_t, c_t, macc)
+-
+ #define P_SET_OV(ov) \
+   if (ov) P.VU.vxsat->write(1);
+ 
+diff --git a/riscv/vector_unit.cc b/riscv/vector_unit.cc
+index c2e68e46..7c6633cd 100644
+--- a/riscv/vector_unit.cc
++++ b/riscv/vector_unit.cc
+@@ -13,15 +13,6 @@ void vectorUnit_t::vectorUnit_t::reset()
+   reg_file = malloc(NVPR * vlenb);
+   memset(reg_file, 0, NVPR * vlenb);
+ 
+-  altfmt_supported_sew8 =
+-    p->extension_enabled_const(EXT_ZVQBDOT8I) ||
+-    false;
+-
+-  altfmt_supported_sew16 =
+-    p->extension_enabled_const(EXT_ZVQBDOT16I) ||
+-    p->extension_enabled_const(EXT_ZVFWBDOT16BF) ||
+-    false;
+-
+   auto state = p->get_state();
+   state->add_csr(CSR_VXSAT, vxsat = std::make_shared<vxsat_csr_t>(p, CSR_VXSAT));
+   state->add_csr(CSR_VSTART, vstart = std::make_shared<vector_csr_t>(p, CSR_VSTART, /*mask*/ VLEN - 1));
+@@ -47,17 +38,10 @@ reg_t vectorUnit_t::vectorUnit_t::set_vl(int rd, int rs1, reg_t reqVL, reg_t new
+     vlmax = (VLEN/vsew) * vflmul;
+     vta = extract64(newType, 6, 1);
+     vma = extract64(newType, 7, 1);
+-    bool new_altfmt = newType & 0x100;
+-
+-    bool altfmt_supported_for_sew =
+-      (altfmt_supported_sew8 && vsew == 8) ||
+-      (altfmt_supported_sew16 && vsew == 16) ||
+-      false;
+ 
+     vill = !(vflmul >= 0.125 && vflmul <= 8)
+            || vsew > std::min(vflmul, 1.0f) * ELEN
+-           || (newType >> 9) != 0
+-           || (new_altfmt && !altfmt_supported_for_sew)
++           || (newType >> 8) != 0
+            || (rd == 0 && rs1 == 0 && old_vlmax != vlmax);
+ 
+     if (vill) {
+diff --git a/riscv/vector_unit.h b/riscv/vector_unit.h
+index 92d48ea9..0e806188 100644
+--- a/riscv/vector_unit.h
++++ b/riscv/vector_unit.h
+@@ -101,8 +101,6 @@ public:
+   reg_t ELEN, VLEN;
+   bool vill;
+   bool vstart_alu;
+-  bool altfmt_supported_sew8 = false;
+-  bool altfmt_supported_sew16 = false;
+ 
+   // vector element for various SEW
+   template<class T> T& elt(reg_t vReg, reg_t n, bool is_write = false);
+@@ -158,8 +156,6 @@ public:
+   reg_t get_elen() { return ELEN; }
+   reg_t get_slen() { return VLEN; }
+ 
+-  bool altfmt() { return vtype->read() & 0x100; }
+-
+   VRM get_vround_mode() {
+     return (VRM)(vxrm->read());
+   }
+diff --git a/spike_main/spike.cc b/spike_main/spike.cc
+index 3b0e0048..b78f7269 100644
+--- a/spike_main/spike.cc
++++ b/spike_main/spike.cc
+@@ -20,8 +20,15 @@
+ #include <limits>
+ #include <cinttypes>
+ #include <sstream>
++#include <algorithm>
++#include "platform.h"
+ #include "../VERSION"
+ 
++uint64_t contract = TOP;
++std::ofstream leak_out;
++// FILE * leak_out;
++std::ofstream dep_out;
++
+ static void help(int exit_code = 1)
+ {
+   fprintf(stderr, "Spike RISC-V ISA Simulator " SPIKE_VERSION "\n\n");
+@@ -85,6 +92,8 @@ static void help(int exit_code = 1)
+   fprintf(stderr, "  --dm-no-impebreak     Debug module won't support implicit ebreak in program buffer\n");
+   fprintf(stderr, "  --blocksz=<size>      Cache block size (B) for CMO operations(powers of 2) [default 64]\n");
+   fprintf(stderr, "  --instructions=<n>    Stop after n instructions\n");
++  fprintf(stderr, "  --ctr=<name>          hardware-software contract (ct/arch/bm/ct-b/top)[default %s]\n", DEFAULT_CTR);
++  fprintf(stderr, "  -o=<name>             contract log file\n");
+ 
+   exit(exit_code);
+ }
+@@ -108,7 +117,7 @@ static std::ifstream::pos_type get_file_size(const char *filename)
+ }
+ 
+ static void read_file_bytes(const char *filename,size_t fileoff,
+-                            abstract_mem_t* mem, size_t memoff, size_t read_sz)
++                            abstract_mem_t* mem, size_t memoff, size_t read_sz) //M:: this is where the input file being written in memory
+ {
+   std::ifstream in(filename, std::ios::in | std::ios::binary);
+   in.seekg(fileoff, std::ios::beg);
+@@ -314,6 +323,13 @@ static std::vector<size_t> parse_hartids(const char *s)
+   return hartids;
+ }
+ 
++void close_logs()
++{
++  // fclose(leak_out);
++  leak_out.close();
++  dep_out.close();
++}
++
+ int main(int argc, char** argv)
+ {
+   bool debug = false;
+@@ -457,6 +473,25 @@ int main(int argc, char** argv)
+     instructions = strtoull(s, 0, 0);
+   });
+ 
++  parser.option(0, "ctr", 1, [&](const char* s){
++    if (strcmp(s, "ct") == 0) {
++      contract = SEQ_CT;
++    } else if (strcmp(s, "arch") == 0) {
++      contract = SEQ_ARCH;
++    } else if (strcmp(s, "bm") == 0) {
++      contract = SEQ_BM;
++    } else if (strcmp(s, "ct-b") == 0) {
++      contract = SEQ_CT_B;
++    } else {
++      contract = TOP; // default is "top"
++    }
++  });
++
++  parser.option(0, "o", 1, [&](const char* s){
++    dep_out.open("dep_tracking.txt");
++    leak_out.open(s, std::ios::out | std::ios::trunc);
++  });
++
+   auto argv1 = parser.parse(argv);
+   std::vector<std::string> htif_args(argv1, (const char*const*)argv + argc);
+ 
+@@ -475,7 +510,7 @@ int main(int argc, char** argv)
+       kernel_offset = 0x400000;
+     for (auto& m : mems) {
+       if (kernel_size && (kernel_offset + kernel_size) < m.second->size()) {
+-         read_file_bytes(kernel, 0, m.second, kernel_offset, kernel_size);
++         read_file_bytes(kernel, 0, m.second, kernel_offset, kernel_size); //M:: read input file
+          break;
+       }
+     }
+@@ -548,7 +583,27 @@ int main(int argc, char** argv)
+   s.configure_log(log, log_commits);
+   s.set_histogram(histogram);
+ 
+-  auto return_code = s.run();
++  auto return_code = s.run(); //M:: running point
++
++  dep_out.close();
++
++
++  std::vector<std::string> lines;
++  {
++    std::ifstream in("dep_tracking.txt");
++    std::string s;
++    while (std::getline(in, s)) lines.push_back(std::move(s));
++  }
++
++  std::sort(lines.begin(), lines.end());
++  lines.erase(std::unique(lines.begin(), lines.end()), lines.end());
++
++  {
++    std::ofstream out("dep_tracking.txt", std::ios::trunc);
++    for (const auto& L : lines) out << L << '\n';
++  }
++
++  close_logs();
+ 
+   for (auto& mem : mems)
+     delete mem.second;

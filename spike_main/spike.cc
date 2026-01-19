@@ -588,19 +588,23 @@ int main(int argc, char** argv)
   dep_out.close();
 
 
-  std::vector<std::string> lines;
-  {
-    std::ifstream in("dep_tracking.txt");
-    std::string s;
-    while (std::getline(in, s)) lines.push_back(std::move(s));
-  }
+  // Post-process dep tracking output (stable order + de-dup) by default.
+  // Set SPIKE_DEP_RAW=1 to keep raw, append-order output (including duplicates).
+  if (!getenv("SPIKE_DEP_RAW")) {
+    std::vector<std::string> lines;
+    {
+      std::ifstream in("dep_tracking.txt");
+      std::string s;
+      while (std::getline(in, s)) lines.push_back(std::move(s));
+    }
 
-  std::sort(lines.begin(), lines.end());
-  lines.erase(std::unique(lines.begin(), lines.end()), lines.end());
+    std::sort(lines.begin(), lines.end());
+    lines.erase(std::unique(lines.begin(), lines.end()), lines.end());
 
-  {
-    std::ofstream out("dep_tracking.txt", std::ios::trunc);
-    for (const auto& L : lines) out << L << '\n';
+    {
+      std::ofstream out("dep_tracking.txt", std::ios::trunc);
+      for (const auto& L : lines) out << L << '\n';
+    }
   }
 
   close_logs();
