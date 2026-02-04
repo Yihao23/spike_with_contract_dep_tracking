@@ -223,6 +223,8 @@ public:
   // Called at leak time: compute and write the required dependency addresses.
   void save_req_dependencies_on_file(const Leak &cur_leak, std::ostream& dep_file);
 
+  void print_orignal_dependencies(std::string name,uint64_t reg, std::ostream& dep_file);
+
 private:
 
   uint64_t instr_;

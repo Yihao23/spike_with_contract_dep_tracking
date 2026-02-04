@@ -12,7 +12,7 @@
 #include <deque>
 #include <string>
 #include <ostream>
-// #include "dep.h"
+#include "dep.h"
 struct Leak {
     std::string  loc;
     std::uint64_t value{}; 
@@ -49,6 +49,6 @@ private:
     std::deque<Leak> leaks_; 
 };
 
-void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, processor_t *p);
+void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, processor_t *p, Dep_tracker &dep_tracker);
 
 #endif

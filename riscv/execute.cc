@@ -164,10 +164,17 @@ inline void processor_t::update_histogram(reg_t pc)
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker, Leakage &leakages) //M:: execute instruction and update pc{
 {
   printf("Executing instruction at pc: 0x%lx\n", pc);
-  if (pc >= 0x10110000 && pc <= 0x10110030) {
+  if (pc >= 0x80000480 && pc <= 0x80000718) {
+  //if (pc <= 0x80000718) {
     printf("dep tracking range\n");
+
+    
+    // if (fetch.insn.rd() == fetch.insn.rs2() && fetch.insn.rd() != 0) {
+    //   dep_tracker.print_orignal_dependencies(fetch.insn.rs2(),dep_out);
+    // }
+
+    add_leakage(leakages, pc, fetch.insn, fetch.func, p, dep_tracker);
     add_dependency(dep_tracker, pc, fetch.insn, p, dep_out);
-    add_leakage(leakages, pc, fetch.insn, fetch.func, p);
   }
   return fetch.func(p, fetch.insn, pc);
 }
@@ -211,7 +218,7 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
   p->update_histogram(pc);
 
   add_dependency(dep_tracker, pc, fetch.insn, p, dep_out);
-  add_leakage(leakages, npc, fetch.insn, fetch.func, p);
+  add_leakage(leakages, npc, fetch.insn, fetch.func, p, dep_tracker);
 
   return npc;
 }
@@ -347,7 +354,7 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         // Dep_tracker dep_tracker1(pc);
         // dep_tracker.next_instruction(pc);
         // init_leaks(&leakage);
-        printf("pc: 0x%lx\n", pc);
+        printf("pc: 0x%lx", pc);
         printf("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
         auto old_leak_size = leakages.size();
         for (auto ic_entry = _mmu->access_icache(pc); ; ) {
@@ -363,8 +370,12 @@ void processor_t::step(size_t n) //M:: from step which was inside idle in sim.cc
         }
         advance_pc();
         // Some instructions may not produce any leak entries; avoid back() on empty.
-        if (leakages.size() > old_leak_size)
+        if ((leakages.size() - old_leak_size) > 0 && (leakages.size() - old_leak_size )<=2){
           dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
+        }else if (leakages.size() - old_leak_size >2){
+          dep_tracker.save_req_dependencies_on_file(leakages.leaks()[leakages.size() -2], dep_out);
+          dep_tracker.save_req_dependencies_on_file(leakages.leaks().back(), dep_out);
+        }
         dep_tracker.next_instruction(pc);
       printf("~~~~~~~~~~~~~~~~~~~~~~~~~!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
         //leakages.delete_leak();

@@ -3,15 +3,15 @@
       .globl _start
   _start:
       la   t0, a_mem
-      ld   a0, 0(t0)        # rs1 value from memory (a_mem)
+      ld   a1, 0(t0)        # rs1 value from memory (a_mem)
 
       la   t1, b_mem
       ld   a1, 0(t1)        # rs2 value from memory (b_mem)
 
       divu a2, a0, a1       # opcode 0110011 (M extension)
-      div  a3, a0, a2
-      rem  a4, a5,a3
-      remu a6,a5,a4
+      #div  a3, a0, a2
+      #rem  a4, a5,a3
+      #remu a6,a5,a4
 
       # exit via tohost
       la   t2, tohost

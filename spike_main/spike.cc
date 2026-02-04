@@ -93,7 +93,7 @@ static void help(int exit_code = 1)
   fprintf(stderr, "  --blocksz=<size>      Cache block size (B) for CMO operations(powers of 2) [default 64]\n");
   fprintf(stderr, "  --instructions=<n>    Stop after n instructions\n");
   fprintf(stderr, "  --ctr=<name>          hardware-software contract (ct/arch/bm/ct-b/top)[default %s]\n", DEFAULT_CTR);
-  fprintf(stderr, "  -o=<name>             contract log file\n");
+  fprintf(stderr, "  -o=<name>             contract log file\n");// only accepted long name --o
 
   exit(exit_code);
 }
@@ -590,7 +590,8 @@ int main(int argc, char** argv)
 
   // Post-process dep tracking output (stable order + de-dup) by default.
   // Set SPIKE_DEP_RAW=1 to keep raw, append-order output (including duplicates).
-  if (!getenv("SPIKE_DEP_RAW")) {
+  if (getenv("SPIKE_DEP_RAW")) {
+  
     std::vector<std::string> lines;
     {
       std::ifstream in("dep_tracking.txt");

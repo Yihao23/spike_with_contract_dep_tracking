@@ -47,7 +47,7 @@ bool Dep_tracker::track_dependency(Target target, Target source,
 
   A->current_deps[slot] = source;
   A->dep_pos[slot] = p;
-  printf("**********************************************\n");
+  printf("track_dependency**********************************************\n");
   printf("Tracking dep: target %d depends on source %d at pos %d\n", to_i(target), to_i(source), source_pos);
   printf("Accumulator: %d\n", A->name);
   printf("PC: 0x%llx instr#: %llu\n",
@@ -55,6 +55,7 @@ bool Dep_tracker::track_dependency(Target target, Target source,
        (unsigned long long)p.instr);
   // propagate initial deps
   add_initials_from(vault_[to_i(source)].get(), A, state); //save current deps of sources
+  printf("**********************************************track_dependency\n");
   return true;
 }
 
@@ -69,15 +70,18 @@ bool Dep_tracker::track_memory(Target target, Target source,
   // ---------- LOAD ----------
   // LOAD: target <= MEM[addr..addr+width)
   if (source == Target::MEM) {
+    printf("track_memory load +_+_+_+_+_+_+_+_+\n");
     for (uint8_t i = 0; i < width; i++) {
       auto& me = get_mem(addr + i);
       A->local_bytes[i] = me.addr;
       add_initials_from(me.cur.get(), A, state); //add this addr itself and its deps if this addr used before              
       A->dep_pos[BYTE1_INDEX + i] = cur_pos(BYTE1_INDEX + i);
     }
+    printf("+_+_+_+_+_+_+_+_+track_memory load\n");
     return true;
   }
 
+   printf("track_memory store +_+_+_+_+_+_+_+_+\n");
   // ---------- STORE ----------
   // STORE: MEM[addr..addr+width) <= source
   if (target == Target::MEM) {
@@ -116,11 +120,13 @@ bool Dep_tracker::track_memory(Target target, Target source,
     // remaining_mem_->weak_deps.push_back(w);
     return true;
   }
+  printf("+_+_+_+_+_+_+_+_+track_memory store \n");
   return true;
 }
 
 // Finalize the instruction: push both accumulators.
 bool Dep_tracker::commit_target(){
+  printf("{{{((((((((((commit_target function begin))))))))))))))}}}\n");
   auto dump = [&](snapshot* a, const char* tag) {
     if (a->name == Target::ACCU || a->name == Target::ACCU_PC) return;
 
@@ -169,7 +175,6 @@ bool Dep_tracker::commit_target(){
     printf("  weak_deps: %zu weak_dep_positions: %zu\n",
           a->weak_deps.size(), a->weak_dep_positions.size());
   };
-
   dump(accu(), "ACCU");
   dump(accu_pc(), "ACCU_PC");
   commit_one_accu(accu());
@@ -213,12 +218,35 @@ void Dep_tracker::save_req_dependencies_on_file(const Leak &cur_leak, std::ostre
     }
     for (auto a : s->initial_mem) dep_file << "0x" << std::hex << a << std::dec << "\n";
   }
-  if(getenv("SPIKE_DEP_RAW")){
+  //if(getenv("SPIKE_DEP_RAW")){
+  {
+    dep_file << "# PC: 0x" << std::hex << pc_ << std::dec << "\n";
     dep_file << "# Leak value: 0x" << std::hex << cur_leak.value << std::dec << "\n";
     dep_file << "# Leak location: " << cur_leak.loc << "\n";
     dep_file << "# Dep reg1: " << cur_leak.dep_reg1 << "\n";
     dep_file << "# Dep reg2: " << cur_leak.dep_reg2 << "\n";
-    dep_file << "# ---------------------Dep_tracker::save_req_dependencies_on_file--------------------------\n"; 
+    dep_file << "# ---------------------Dep_tracker::save_req_dependencies_on_file\n"; 
+  }
+}
+
+void Dep_tracker::print_orignal_dependencies(std::string name,uint64_t reg, std::ostream& dep_file){
+  //dep_file << "## Dep_tracker::print_orignal_dependencies-----------------------\n"; 
+  for (auto start_idx: {reg}) {
+    snapshot* s = vault_[start_idx].get();
+    for (size_t i = 0; i < NBR_OF_ACTUAL_DEPENDENCIES; i++) {
+      if (s->initial_regs.test(i)) {
+        dep_file << "R" << i << "\n";
+      }
+    }
+    for (auto a : s->initial_mem) dep_file << "0x" << std::hex << a << std::dec << "\n";
+  }
+  //if(getenv("SPIKE_DEP_RAW")){
+  {
+    
+    dep_file << "# PC: 0x" << std::hex << pc_ << std::dec << "\n";
+    dep_file << "# Orignal reg: " << reg << "\n";
+    dep_file << "# Leak location: " << name << "\n";
+    dep_file << "# ---------------------Dep_tracker::save_req_dependencies_on_file\n"; 
   }
 }
 
@@ -232,127 +260,146 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
   Target rs1 = to_T(insn.rs1());
   Target rs2 = to_T(insn.rs2());
   Target rd  = to_T(insn.rd());
-
-  switch (insn.opcode()){
-
-    /*arth- reg*/
-    case 0b0110011:
+  switch (insn.opcode()){   
+    case 0x03: /*load rd rs1 imm*/
     {
-      // dep_file<< "arth-reg\n";
+      uint64_t width = 0;
+      if (insn.funct3() == 0b000) width = 1; // LB
+      if (insn.funct3() == 0b001) width = 2; // LH
+      if (insn.funct3() == 0b010) width = 4; // LW
+      if (insn.funct3() == 0b100) width = 1; // LBU
+      if (insn.funct3() == 0b101) width = 2; // LHU
+      if (insn.funct3() == 0b110) width = 4; // LWU
+      if (insn.funct3() == 0b111) width = 8; // LD
+      dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
+      dep_tracker.track_memory(rd, Target::MEM, insn.i_imm()+RS1, width,0, INIT_STATE::ADD);
+      dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      break;
+    }  
+    case 0x0f:/*fence , fence iorw, iorw*/
+    {
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      break;
+    }   
+    case 0x13: /*op-imm rd rs1 imm*/
+    {
       if (insn.rd() != 0) {
         dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
-        dep_tracker.track_dependency(rd, rs2, RS2_INDEX, 0b11, false, INIT_STATE::ADD);
+        dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
+        //dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      }
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      break;
+    }
+    case 0x17:/*auipc, auipc rd, imm20*/
+    {
+      if (insn.rd() != 0) {
+        dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
         dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       }
-      // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
-      break;
-    }
-  
-    /*arth- imm*/
-    case 0b0010011:
-    {
-        if (insn.rd() != 0) {
-          dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
-          dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
-          dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
-        }
-        // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
-      break;
-    }
-    /*load*/
-    case 0b0000011:
-    {
-        uint64_t width = 1 << ((insn.funct3() & 0b11) ); // 0=byte,1=half,2=word,3=double
-        if (insn.funct3() == 0b100) width = 1; // LBU
-        if (insn.funct3() == 0b101) width = 2; // LHU
-        if (insn.funct3() == 0b110) width = 4; // LWU
-        if (insn.funct3() == 0b111) width = 8; // LDWU
-        dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
-        dep_tracker.track_memory(rd, Target::MEM, insn.i_imm()+RS1, width,0, INIT_STATE::ADD);
-        dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
         dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       break;
     }
-  
-    /*store*/
-    case 0b0100011:
+    case 0x23:  /*store rs2 imm(rs1)*/
     {
-        uint64_t width = 1 << ((insn.funct3() & 0b11) ); // 0=byte,1=half,2=word,3=double
-        if (insn.funct3() == 0b100) width = 1; // SB
-        if (insn.funct3() == 0b101) width = 2; // SH
-        if (insn.funct3() == 0b110) width = 4; // SW
-        if (insn.funct3() == 0b111) width = 8; // SD
-        dep_tracker.track_memory(Target::MEM, rs1, insn.s_imm()+RS1, width,0, INIT_STATE::OVERWRITE);
-        dep_tracker.track_memory(Target::MEM, rs2, insn.s_imm()+RS2, width,0, INIT_STATE::ADD);
-        dep_tracker.track_memory(Target::MEM, Target::PC, PC_INDEX,width,0, INIT_STATE::ADD);
-        // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      uint64_t width = 0;
+      if (insn.funct3() == 0b000) width = 1; // SB
+      if (insn.funct3() == 0b001) width = 2; // SH
+      if (insn.funct3() == 0b010) width = 4; // SW
+      if (insn.funct3() == 0b011) width = 8; // SD
+      dep_tracker.track_memory(Target::MEM, rs1, insn.s_imm()+RS1, width,0, INIT_STATE::OVERWRITE);
+      dep_tracker.track_memory(Target::MEM, rs2, insn.s_imm()+RS1, width,0, INIT_STATE::ADD);
+      //dep_tracker.track_memory(Target::MEM, Target::PC, PC_INDEX,width,0, INIT_STATE::ADD);
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       break;
     }
-    /*jal*/
-    case 0b1111111:
+    case 0x33:   /*op rd rs1 rs2*/
     {
-      // dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
-      // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
-      dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
+      if (insn.rd() != 0) {
+        if (insn.rs1() != 0){
+        dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
+        }
+        if (insn.rs2() != 0){
+        dep_tracker.track_dependency(rd, rs2, RS2_INDEX, 0b11, false, INIT_STATE::ADD);
+        }
+        //dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      }
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      break;
+    }     
+    case 0x37:/*lui rd imm*/
+    {
+      if (insn.rd() != 0) {
+        dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
+      }
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       break;
     }
-    /*jalr*/  
-    case 0b1110111:
+    case 0x63: /*branch,rs1, rs2, off*/
     {
-      // dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false);
-      dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
-      dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false, INIT_STATE::ADD);
-      break;
-    }
-    /*branch*/
-    case 0b1100011:
-    {
-        // Target rs1 = to_T(insn.rs1());
-        // Target rs2 = to_T(insn.rs2());
+      if (insn.rs2() != insn.rs1()){
         dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
         dep_tracker.track_dependency(Target::PC, rs2, RS2_INDEX, 0b11, false, INIT_STATE::ADD);
-
-        uint8_t taken=0;
-        if (insn.funct3() == 0b000){ //beq
-            if(RS1 == RS2) 
-                taken=1;
-        }
-        else if (insn.funct3() == 0b001){ //bne
-            if(RS1 != RS2) 
-                taken=1;
-        }
-        else if (insn.funct3() == 0b100){ //blt
-            if(sreg_t(RS1) < sreg_t(RS2))
-                taken=1;
-        }
-        else if (insn.funct3() == 0b101){ //bge
-            if(sreg_t(RS1) >= sreg_t(RS2)) 
-                taken=1;
-        }
-        else if (insn.funct3() == 0b110){ //bltu
-            if(RS1 < RS2)
-                taken=1;
-        }
-        else if (insn.funct3() == 0b111){ //bgeu
-            if(RS1 >= RS2) 
-                taken=1;
-        }
-        if (taken)
-          dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
-
+      }
+      uint8_t taken=0;
+      if (insn.funct3() == 0b000){ //beq
+          if(RS1 == RS2) 
+              taken=1;
+      }
+      else if (insn.funct3() == 0b001){ //bne
+          if(RS1 != RS2) 
+              taken=1;
+      }
+      else if (insn.funct3() == 0b100){ //blt
+          if(sreg_t(RS1) < sreg_t(RS2))
+              taken=1;
+      }
+      else if (insn.funct3() == 0b101){ //bge
+          if(sreg_t(RS1) >= sreg_t(RS2)) 
+              taken=1;
+      }
+      else if (insn.funct3() == 0b110){ //bltu
+          if(RS1 < RS2)
+              taken=1;
+      }
+      else if (insn.funct3() == 0b111){ //bgeu
+          if(RS1 >= RS2) 
+              taken=1;
+      }
+      if (taken){
+        dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
+      }
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       break;
     }
-      /*lui*/
-    case 0b0110111:
+    case 0x67: /*jalr rd, rs1, imm */  
     {
-        if (insn.rd() != 0) {
-            printf("lui rd=%d\n", insn.rd());
-            dep_tracker.track_dependency(rd, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
-        }
-        break;
+      if (insn.rd() != 0)
+      {
+        dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
+      }
+      //dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      dep_tracker.track_dependency(Target::PC, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
+      dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
+      break;
     }
-
-    default:
+    case 0x6f:/*jal rd, off*/
+    {
+      if (insn.rd() != 0)
+      {
+      dep_tracker.track_dependency(rd, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
+      }
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      dep_tracker.track_dependency(Target::PC, Target::IMM, IMM_INDEX, 0b11, false, INIT_STATE::ADD);
+      break;
+    }
+    case 0x73: /*system*/
+    {
+      dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
+      break;
+    }
+    default: /*unsupported instruction*/
     {
       break;
     }
