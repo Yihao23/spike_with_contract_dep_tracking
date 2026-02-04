@@ -8,4 +8,5 @@ riscv64-unknown-elf-gcc -g -Og -ffreestanding -nostdlib -nostartfiles   -T test_
   done
 
 #riscv64-unknown-elf-objdump -x -d -M numeric test_ctr_in_spike/easy_ctr.elf > test_ctr_in_spike/fulldump.out
-SPIKE_DEP_RAW=1 .tools/bin/spike --ctr=top --o=leaks.txt -m0x10100000:0x20000 test_ctr_in_spike/div_example.elf
+#SPIKE_DEP_RAW=0 .tools/bin/spike --ctr=top --o=leaks.txt -m0x10100000:0x20000 test_ctr_in_spike/div_example.elf
+.tools/bin/spike --ctr=top --o=leaks.txt -m0x10100000:0x20000 test_ctr_in_spike/div_example.elf
