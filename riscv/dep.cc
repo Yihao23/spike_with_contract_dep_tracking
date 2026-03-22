@@ -220,8 +220,14 @@ void Dep_tracker::save_req_dependencies_on_file(const Leak &cur_leak, std::ostre
   }
   //if(getenv("SPIKE_DEP_RAW")){
   {
-    dep_file << "# PC: 0x" << std::hex << pc_ << std::dec << "\n";
-    dep_file << "# Leak value: 0x" << std::hex << cur_leak.value << std::dec << "\n";
+    // Pretty-print RV32 sign-extended values: Spike stores XLEN values in a 64-bit reg_t.
+    // For RV32, many values/PCs are sign-extended to 0xffffffffXXXXXXXX. Printing the
+    // low 32 bits makes dep_tracking.txt easier to consume for RV32 targets.
+    auto pretty_rv32 = [](uint64_t x) -> uint64_t {
+      return ((x >> 32) == 0xffffffffULL) ? (x & 0xffffffffULL) : x;
+    };
+    dep_file << "# PC: 0x" << std::hex << pretty_rv32(pc_) << std::dec << "\n";
+    dep_file << "# Leak value: 0x" << std::hex << pretty_rv32(cur_leak.value) << std::dec << "\n";
     dep_file << "# Leak location: " << cur_leak.loc << "\n";
     dep_file << "# Dep reg1: " << cur_leak.dep_reg1 << "\n";
     dep_file << "# Dep reg2: " << cur_leak.dep_reg2 << "\n";
@@ -242,8 +248,10 @@ void Dep_tracker::print_orignal_dependencies(std::string name,uint64_t reg, std:
   }
   //if(getenv("SPIKE_DEP_RAW")){
   {
-    
-    dep_file << "# PC: 0x" << std::hex << pc_ << std::dec << "\n";
+    auto pretty_rv32 = [](uint64_t x) -> uint64_t {
+      return ((x >> 32) == 0xffffffffULL) ? (x & 0xffffffffULL) : x;
+    };
+    dep_file << "# PC: 0x" << std::hex << pretty_rv32(pc_) << std::dec << "\n";
     dep_file << "# Orignal reg: " << reg << "\n";
     dep_file << "# Leak location: " << name << "\n";
     dep_file << "# ---------------------Dep_tracker::save_req_dependencies_on_file\n"; 
