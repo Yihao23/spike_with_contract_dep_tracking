@@ -164,7 +164,9 @@ inline void processor_t::update_histogram(reg_t pc)
 static inline reg_t execute_insn_fast(processor_t* p, reg_t pc, insn_fetch_t fetch, Dep_tracker &dep_tracker, Leakage &leakages) //M:: execute instruction and update pc{
 {
   printf("Executing instruction at pc: 0x%lx\n", pc);
-  if (pc >= 0x80000480 && pc <= 0x80000718) {
+  uint32_t pc32 = (uint32_t)pc;
+  printf("Executing instruction at pc after trim: 0x%lx\n", pc32);
+  if (pc32 >= 0x80000480 && pc32 <= 0x80000718) {
   //if (pc <= 0x80000718) {
     printf("dep tracking range\n");
 
