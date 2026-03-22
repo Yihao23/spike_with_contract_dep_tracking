@@ -27,6 +27,7 @@ std::unordered_map <std::string, std::string> contract_templete = {
     {"bgeu", "REG_RS2"},
 
     {"jalr", "REG_RS1"},
+    {"jal", "REG_PC"},
 
     {"lb", "REG_RS1"},
     {"lh", "REG_RS1"},
@@ -156,7 +157,7 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
           if(RS1 >= RS2) 
               taken=1;
       }
-      leaks.add_leak( "taken", taken, insn.rs1(), insn.rs2());
+      leaks.add_leak(name, taken, insn.rs1(), insn.rs2());
       break;
     }
     case 0x67: /*jalr rd, rs1, imm */  
@@ -171,6 +172,7 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
         if (insn.rd() != 0)
         {
         }
+        leaks.add_leak(name, insn.i_imm());
         break;
     }
     case 0x73: /*system*/
