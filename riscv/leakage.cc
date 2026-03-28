@@ -81,7 +81,7 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
   switch (insn.opcode()){   
     case 0x03: /*load rd rs1 imm*/
     {
-      leaks.add_leak("LOAD",insn.i_imm()+RS1,insn.rs1());
+      leaks.add_leak(name, insn.i_imm()+RS1, insn.rs1());
       break;
     }  
     case 0x0f:/*fence , fence iorw, iorw*/
@@ -103,7 +103,7 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
     }
     case 0x23:  /*store rs2 imm(rs1)*/
     {
-      leaks.add_leak("STORE",insn.i_imm()+RS1,insn.rs1());
+      leaks.add_leak(name, insn.i_imm()+RS1, insn.rs1());
       break;
     }
     case 0x33:   /*op rd rs1 rs2*/
