@@ -103,7 +103,7 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
     }
     case 0x23:  /*store rs2 imm(rs1)*/
     {
-      leaks.add_leak(name, insn.i_imm()+RS1, insn.rs1());
+      leaks.add_leak(name, insn.s_imm()+RS1, insn.rs1());
       break;
     }
     case 0x33:   /*op rd rs1 rs2*/
@@ -130,7 +130,8 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
     }
     case 0x63: /*branch,rs1, rs2, off*/
     {
-      if (insn.rs2() != insn.rs1()){
+      if (insn.rs2() == insn.rs1()){
+        break;
       }
       uint8_t taken=0;
       if (insn.funct3() == 0b000){ //beq
@@ -157,7 +158,12 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
           if(RS1 >= RS2) 
               taken=1;
       }
-      leaks.add_leak(name, taken, insn.rs1(), insn.rs2());
+      if (insn.rs1() != 0) {
+        leaks.add_leak(std::string(name)+"-rs1", RS1, insn.rs1());
+      }
+      if (insn.rs2() != 0) {
+        leaks.add_leak(std::string(name)+"-rs2", RS2, 0,insn.rs2());
+      }
       break;
     }
     case 0x67: /*jalr rd, rs1, imm */  
