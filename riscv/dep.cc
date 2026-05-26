@@ -258,7 +258,29 @@ void Dep_tracker::print_orignal_dependencies(std::string name,uint64_t reg, std:
   }
 }
 
-
+void Dep_tracker::print_branch_dependencies(std::string name,uint64_t reg1,uint64_t reg2, std::ostream& dep_file){
+  //dep_file << "## Dep_tracker::print_orignal_dependencies-----------------------\n"; 
+  for (auto start_idx: {reg1, reg2}) {
+    snapshot* s = vault_[start_idx].get();
+    for (size_t i = 0; i < NBR_OF_ACTUAL_DEPENDENCIES; i++) {
+      if (s->initial_regs.test(i)) {
+        dep_file << "R" << i << "\n";
+      }
+    }
+    for (auto a : s->initial_mem) dep_file << "0x" << std::hex << a << std::dec << "\n";
+  }
+  //if(getenv("SPIKE_DEP_RAW")){
+  {
+    auto pretty_rv32 = [](uint64_t x) -> uint64_t {
+      return ((x >> 32) == 0xffffffffULL) ? (x & 0xffffffffULL) : x;
+    };
+    dep_file << "# PC: 0x" << std::hex << pretty_rv32(pc_) << std::dec << "\n";
+    dep_file << "# Orignal reg1: " << reg1 << "\n";
+    dep_file << "# Orignal reg2: " << reg2 << "\n";
+    dep_file << "# Leak location: " << name << "\n";
+    dep_file << "# ---------------------Dep_tracker::save_req_dependencies_on_file\n"; 
+  }
+}
 
 
 // Maps an instruction to calls into the tracker.

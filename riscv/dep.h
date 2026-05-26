@@ -224,6 +224,8 @@ public:
   void save_req_dependencies_on_file(const Leak &cur_leak, std::ostream& dep_file);
 
   void print_orignal_dependencies(std::string name,uint64_t reg, std::ostream& dep_file);
+  void print_branch_dependencies(std::string name,uint64_t reg1,uint64_t reg2, std::ostream& dep_file);
+
 
 private:
 

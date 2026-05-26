@@ -76,6 +76,17 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
   printf("mnemonic name: %s\n",name);
   if (contract_templete.find(name) == contract_templete.end()) return;
   
+      unsigned xlen = p->get_xlen();
+      sreg_t smax = (sreg_t)(((reg_t)1 << (xlen - 1)) - 1);
+      sreg_t smin_raw = (sreg_t)((reg_t)1 << (xlen - 1));                                         
+      int shift = 64 - xlen;                                                                      
+      sreg_t smin = (smin_raw << shift) >> shift;
+      reg_t umax = ~(reg_t)0 ;
+        printf("smax=0x%016llx smin=0x%016llx (xlen=%u) umax=0x%016llx\n",                                         
+         (unsigned long long)smax,                                                            
+         (unsigned long long)smin,
+         xlen,
+         (unsigned long long)umax);
   printf("executing instruction is in the contrct_template::");
   printf("%llx\n",npc);
   switch (insn.opcode()){   
@@ -130,11 +141,12 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
     }
     case 0x63: /*branch,rs1, rs2, off*/
     {
-      if (insn.rs2() == insn.rs1()){
-        break;
-      }
+      // if (insn.rs2() == insn.rs1()){
+        // break;
+      // }
+
       uint8_t taken=0;
-      if (insn.funct3() == 0b000){ //beq
+      if (insn.funct3() == 0b000){//beq
           if(RS1 == RS2) 
               taken=1;
       }
@@ -143,18 +155,38 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
               taken=1;
       }
       else if (insn.funct3() == 0b100){ //blt
+          if(sreg_t(RS1) == smax || sreg_t(RS2) == smin) {
+          dep_tracker.print_branch_dependencies(std::string(name)+"-rs1", insn.rs1(), insn.rs2(), dep_out);
+          dep_tracker.print_branch_dependencies(std::string(name)+"-rs2", insn.rs1(), insn.rs2(), dep_out);
+          break; 
+          }
           if(sreg_t(RS1) < sreg_t(RS2))
               taken=1;
       }
       else if (insn.funct3() == 0b101){ //bge
+          if(sreg_t(RS1) == smax || sreg_t(RS2) == smin) {
+          dep_tracker.print_branch_dependencies(std::string(name)+"-rs1", insn.rs1(), insn.rs2(), dep_out);
+          dep_tracker.print_branch_dependencies(std::string(name)+"-rs2", insn.rs1(), insn.rs2(), dep_out);
+          break; 
+          }
           if(sreg_t(RS1) >= sreg_t(RS2)) 
               taken=1;
       }
       else if (insn.funct3() == 0b110){ //bltu
+          if(reg_t(RS1) == umax || RS2 == 0) {
+            dep_tracker.print_branch_dependencies(std::string(name)+"-rs1", insn.rs1(), insn.rs2(), dep_out);
+            dep_tracker.print_branch_dependencies(std::string(name)+"-rs2", insn.rs1(), insn.rs2(), dep_out);
+            break; 
+          }
           if(RS1 < RS2)
               taken=1;
       }
       else if (insn.funct3() == 0b111){ //bgeu
+          if(reg_t(RS1) == umax || RS2 == 0) {
+            dep_tracker.print_branch_dependencies(std::string(name)+"-rs1", insn.rs1(), insn.rs2(), dep_out);
+            dep_tracker.print_branch_dependencies(std::string(name)+"-rs2", insn.rs1(), insn.rs2(), dep_out);
+            break; 
+          }
           if(RS1 >= RS2) 
               taken=1;
       }
