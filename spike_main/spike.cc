@@ -28,6 +28,11 @@ uint64_t contract = TOP;
 std::ofstream leak_out;
 // FILE * leak_out;
 std::ofstream dep_out;
+bool emit_id_atoms = false;
+// Independent output stream for id-based / imm encoding atoms. Decoupled from
+// dep_out so the "save only last 2 leaks per insn" truncation in the
+// value-based path does not drop id-rs1/id-rs2/id-rd/imm entries.
+std::ofstream id_dep_out;
 
 static void help(int exit_code = 1)
 {
@@ -93,6 +98,7 @@ static void help(int exit_code = 1)
   fprintf(stderr, "  --blocksz=<size>      Cache block size (B) for CMO operations(powers of 2) [default 64]\n");
   fprintf(stderr, "  --instructions=<n>    Stop after n instructions\n");
   fprintf(stderr, "  --ctr=<name>          hardware-software contract (ct/arch/bm/ct-b/top)[default %s]\n", DEFAULT_CTR);
+  fprintf(stderr, "  --id-atoms            Emit id-based atoms for contract analysis\n");
   fprintf(stderr, "  -o=<name>             contract log file\n");// only accepted long name --o
 
   exit(exit_code);
@@ -328,6 +334,7 @@ void close_logs()
   // fclose(leak_out);
   leak_out.close();
   dep_out.close();
+  if (id_dep_out.is_open()) id_dep_out.close();
 }
 
 int main(int argc, char** argv)
@@ -485,6 +492,11 @@ int main(int argc, char** argv)
     } else {
       contract = TOP; // default is "top"
     }
+  });
+
+  parser.option(0, "id-atoms",0,[&](const char*){
+    emit_id_atoms = true;
+    id_dep_out.open("id_dep_tracking.txt", std::ios::out | std::ios::trunc);
   });
 
   parser.option(0, "o", 1, [&](const char* s){

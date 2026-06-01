@@ -8,6 +8,97 @@
 #include "platform.h"
 // #include "decode.h"
 #include <unordered_map>
+#include <fstream>
+
+// Defined in spike_main/spike.cc, toggled by CLI flag --id-atoms.
+extern bool emit_id_atoms;
+// Independent output file for id-based / imm encoding atoms (see spike.cc).
+extern std::ofstream id_dep_out;
+
+// Emit id-based atoms (reg-id encoding bits + format-specific immediate) for
+// an instruction directly into the dedicated id_dep_out stream. This bypasses
+// the Leakage queue (and therefore the "save only last 1-2 leaks" truncation
+// in the value-based dep_tracking path) so every id/imm atom survives.
+//
+// Output format (one atom per line):
+//   PC=0x<pc> atom=<name>-id-rs1 value=0x<regid>
+//   PC=0x<pc> atom=<name>-imm-I  value=0x<imm>
+static void emit_id_atoms_for_insn(const char *name, insn_t insn, reg_t pc, unsigned xlen) {
+    if (!id_dep_out.is_open()) return;
+
+    // Strip the sign-extension spike applies to 32-bit PCs stored in 64-bit reg_t,
+    // so RV32 traces print 0x80000484 instead of 0xffffffff80000484.
+    if (xlen == 32) pc &= 0xFFFFFFFFull;
+
+    uint32_t opc = insn.opcode();
+    bool has_rd = false, has_rs1 = false, has_rs2 = false;
+    bool has_f3 = false, has_f7 = false;
+    enum { NONE, IMM_I, IMM_S, IMM_B, IMM_U, IMM_J } imm_kind = NONE;
+
+    switch (opc) {
+        case 0x33: case 0x3B:                       // R-type (ALU, ALUW) — no imm
+            has_rd = has_rs1 = has_rs2 = true;
+            has_f3 = has_f7 = true;
+            break;
+        case 0x13: case 0x1B:                       // I-type ALU (addi/slli/...)
+        case 0x03:                                  // I-type Load (lw/lb/...)
+        case 0x67:                                  // I-type JALR
+            has_rd = has_rs1 = true;
+            has_f3 = true;
+            imm_kind = IMM_I;
+            break;
+        case 0x23:                                  // S-type (Store)
+            has_rs1 = has_rs2 = true;
+            has_f3 = true;
+            imm_kind = IMM_S;
+            break;
+        case 0x63:                                  // B-type (Branch)
+            has_rs1 = has_rs2 = true;
+            has_f3 = true;
+            imm_kind = IMM_B;
+            break;
+        case 0x37: case 0x17:                       // U-type (LUI/AUIPC)
+            has_rd = true;
+            imm_kind = IMM_U;
+            break;
+        case 0x6F:                                  // J-type (JAL)
+            has_rd = true;
+            imm_kind = IMM_J;
+            break;
+        default:
+            return;  // system/fence/unknown — skip
+    }
+
+    auto write_atom = [&](const std::string &atom, uint64_t value) {
+        id_dep_out << "PC=0x" << std::hex << pc
+                   << " atom=" << atom
+                   << " value=0x" << std::hex << value
+                   << std::dec << '\n';
+    };
+
+    // opcode / funct3 / funct7 encoding atoms — used to compare per-insn-type
+    // retire timing across cores (e.g. detect fixed-latency vs data-dependent
+    // pipelines for the same opcode class).
+    write_atom(std::string(name) + "-op", (uint64_t)opc);
+    if (has_f3) write_atom(std::string(name) + "-f3", (uint64_t)insn.funct3());
+    if (has_f7) write_atom(std::string(name) + "-f7", (uint64_t)insn.funct7());
+
+    // reg-id atoms
+    if (has_rs1) write_atom(std::string(name) + "-id-rs1", (uint64_t)insn.rs1());
+    if (has_rs2) write_atom(std::string(name) + "-id-rs2", (uint64_t)insn.rs2());
+    if (has_rd)  write_atom(std::string(name) + "-id-rd",  (uint64_t)insn.rd());
+
+    // imm atom (format-specific; cellift end picks mask by suffix)
+    switch (imm_kind) {
+        case IMM_I: write_atom(std::string(name) + "-imm-I", (uint64_t)insn.i_imm());  break;
+        case IMM_S: write_atom(std::string(name) + "-imm-S", (uint64_t)insn.s_imm());  break;
+        case IMM_B: write_atom(std::string(name) + "-imm-B", (uint64_t)insn.sb_imm()); break;
+        case IMM_U: write_atom(std::string(name) + "-imm-U", (uint64_t)insn.u_imm());  break;
+        case IMM_J: write_atom(std::string(name) + "-imm-J", (uint64_t)insn.uj_imm()); break;
+        case NONE:  break;
+    }
+}
+
 std::unordered_map <std::string, std::string> contract_templete = {
     {"addi", "REG_RS1"},
     {"slti", "REG_RS1"},
@@ -69,11 +160,20 @@ std::unordered_map <std::string, std::string> contract_templete = {
 void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, processor_t *p, Dep_tracker &dep_tracker)
 {
 
-  leaks.add_leak("PC", npc);  
+  leaks.add_leak("PC", npc);
   auto* di = p->get_disassembler()->lookup(insn)->get_name();
   if(!di) return;
   const char* name = p->get_disassembler()->lookup(insn)->get_name();
   printf("mnemonic name: %s\n",name);
+
+  // Emit id/imm encoding atoms BEFORE the contract_templete early-return,
+  // because id-based taints (auipc/lui rd, imm-U, etc.) are independent of
+  // the value-based contract and would otherwise be dropped for insns not
+  // in the value contract map.
+  if (emit_id_atoms) {
+    emit_id_atoms_for_insn(name, insn, npc, p->get_xlen());
+  }
+
   if (contract_templete.find(name) == contract_templete.end()) return;
   
       unsigned xlen = p->get_xlen();
