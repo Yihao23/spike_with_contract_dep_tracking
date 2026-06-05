@@ -34,6 +34,13 @@ bool emit_id_atoms = false;
 // value-based path does not drop id-rs1/id-rs2/id-rd/imm entries.
 std::ofstream id_dep_out;
 
+// --raw1-atoms: per-instruction trace consumed by
+// raw1-atom-test-harness/collect_raw1_atom.py to detect RAW dependencies
+// of distance 1 between two adjacent fuzzer-chosen primary instructions.
+// Toggled independently of --id-atoms so the two flows do not interfere.
+bool emit_raw1_atoms = false;
+std::ofstream raw1_dep_out;
+
 static void help(int exit_code = 1)
 {
   fprintf(stderr, "Spike RISC-V ISA Simulator " SPIKE_VERSION "\n\n");
@@ -99,6 +106,7 @@ static void help(int exit_code = 1)
   fprintf(stderr, "  --instructions=<n>    Stop after n instructions\n");
   fprintf(stderr, "  --ctr=<name>          hardware-software contract (ct/arch/bm/ct-b/top)[default %s]\n", DEFAULT_CTR);
   fprintf(stderr, "  --id-atoms            Emit id-based atoms for contract analysis\n");
+  fprintf(stderr, "  --raw1-atoms          Emit per-instruction trace into raw1_dep_tracking.txt for RAW1 atom analysis\n");
   fprintf(stderr, "  -o=<name>             contract log file\n");// only accepted long name --o
 
   exit(exit_code);
@@ -335,6 +343,7 @@ void close_logs()
   leak_out.close();
   dep_out.close();
   if (id_dep_out.is_open()) id_dep_out.close();
+  if (raw1_dep_out.is_open()) raw1_dep_out.close();
 }
 
 int main(int argc, char** argv)
@@ -497,6 +506,11 @@ int main(int argc, char** argv)
   parser.option(0, "id-atoms",0,[&](const char*){
     emit_id_atoms = true;
     id_dep_out.open("id_dep_tracking.txt", std::ios::out | std::ios::trunc);
+  });
+
+  parser.option(0, "raw1-atoms",0,[&](const char*){
+    emit_raw1_atoms = true;
+    raw1_dep_out.open("raw1_dep_tracking.txt", std::ios::out | std::ios::trunc);
   });
 
   parser.option(0, "o", 1, [&](const char* s){

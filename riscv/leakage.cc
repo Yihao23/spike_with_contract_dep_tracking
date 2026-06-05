@@ -15,6 +15,13 @@ extern bool emit_id_atoms;
 // Independent output file for id-based / imm encoding atoms (see spike.cc).
 extern std::ofstream id_dep_out;
 
+// Defined in spike_main/spike.cc, toggled by CLI flag --raw1-atoms. Emits a
+// per-instruction trace into raw1_dep_out so the harness side can detect
+// read-after-write dependencies of distance 1 between two adjacent
+// fuzzer-chosen primary instructions.
+extern bool emit_raw1_atoms;
+extern std::ofstream raw1_dep_out;
+
 // Emit id-based atoms (reg-id encoding bits + format-specific immediate) for
 // an instruction directly into the dedicated id_dep_out stream. This bypasses
 // the Leakage queue (and therefore the "save only last 1-2 leaks" truncation
@@ -99,6 +106,64 @@ static void emit_id_atoms_for_insn(const char *name, insn_t insn, reg_t pc, unsi
     }
 }
 
+// Emit a single trace line per executed instruction into raw1_dep_out.
+// Format (one line per insn, parsed by raw1-atom-test-harness/collect_raw1_atom.py):
+//
+//   PC=0x<pc> insn=<mn> rd=<reg> rs1=<reg> rs2=<reg> value=0x<32-bit word>
+//
+// where <reg> is `xN` (0..31) or `-` when the field is absent in this opcode
+// class. The full instruction word is preserved as `value` so the downstream
+// patcher (which is the same id-rd LSB flipper as for id-atoms) can use it as
+// a sanity-check reference without re-reading the .elf.
+static void emit_raw1_atoms_for_insn(const char *name, insn_t insn, reg_t pc, unsigned xlen) {
+    if (!raw1_dep_out.is_open()) return;
+
+    if (xlen == 32) pc &= 0xFFFFFFFFull;
+
+    uint32_t opc = insn.opcode();
+    bool has_rd = false, has_rs1 = false, has_rs2 = false;
+
+    switch (opc) {
+        case 0x33: case 0x3B:                       // R-type ALU
+            has_rd = has_rs1 = has_rs2 = true;
+            break;
+        case 0x13: case 0x1B:                       // I-type ALU
+        case 0x03:                                  // I-type Load
+        case 0x67:                                  // I-type JALR
+            has_rd = has_rs1 = true;
+            break;
+        case 0x23:                                  // S-type Store (no rd)
+            has_rs1 = has_rs2 = true;
+            break;
+        case 0x63:                                  // B-type Branch (no rd)
+            has_rs1 = has_rs2 = true;
+            break;
+        case 0x37: case 0x17:                       // U-type LUI/AUIPC
+            has_rd = true;
+            break;
+        case 0x6F:                                  // J-type JAL
+            has_rd = true;
+            break;
+        default:
+            return;  // system/fence/unknown — skip; not relevant for raw1
+    }
+
+    auto reg_field = [](bool present, uint64_t num) -> std::string {
+        if (!present) return "-";
+        return "x" + std::to_string(num);
+    };
+
+    uint32_t word = (uint32_t)(insn.bits() & 0xFFFFFFFFull);
+
+    raw1_dep_out << "PC=0x" << std::hex << pc
+                 << " insn=" << name
+                 << " rd="   << reg_field(has_rd,  insn.rd())
+                 << " rs1="  << reg_field(has_rs1, insn.rs1())
+                 << " rs2="  << reg_field(has_rs2, insn.rs2())
+                 << " value=0x" << std::hex << word
+                 << std::dec << '\n';
+}
+
 std::unordered_map <std::string, std::string> contract_templete = {
     {"addi", "REG_RS1"},
     {"slti", "REG_RS1"},
@@ -172,6 +237,12 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
   // in the value contract map.
   if (emit_id_atoms) {
     emit_id_atoms_for_insn(name, insn, npc, p->get_xlen());
+  }
+
+  // Independent of --id-atoms. The collect_raw1_atom.py side does its own
+  // primary detection + clobber filtering, so spike just records the trace.
+  if (emit_raw1_atoms) {
+    emit_raw1_atoms_for_insn(name, insn, npc, p->get_xlen());
   }
 
   if (contract_templete.find(name) == contract_templete.end()) return;
