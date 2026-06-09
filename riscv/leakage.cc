@@ -175,6 +175,23 @@ std::unordered_map <std::string, std::string> contract_templete = {
     {"srli", "REG_RS1"},
     {"srai", "REG_RS1"},
 
+    {"clz", "REG_RS1"},   // Zbb: count-leading-zeros, single rs1 (bare atom)
+    {"ctz", "REG_RS1"},   // Zbb: count-trailing-zeros, single rs1
+    {"cpop", "REG_RS1"},  // Zbb: population-count, single rs1
+    // Zbb single-rs1 (I-type, case 0x13 -> emits -rs1). zext.h is R-type w/ rs2=x0
+    // so case 0x33 only emits -rs1 for it.
+    {"rori", "REG_RS1"},
+    {"sext.b", "REG_RS1"},
+    {"sext.h", "REG_RS1"},
+    {"zext.h", "REG_RS1"},
+    {"orc.b", "REG_RS1"},
+    {"rev8", "REG_RS1"},
+    // Zbs immediate (I-type, case 0x13 -> emits -rs1)
+    {"bclri", "REG_RS1"},
+    {"bseti", "REG_RS1"},
+    {"binvi", "REG_RS1"},
+    {"bexti", "REG_RS1"},
+
     {"beq", "REG_RS2"},
     {"bne", "REG_RS2"},
     {"blt", "REG_RS2"},
@@ -215,6 +232,30 @@ std::unordered_map <std::string, std::string> contract_templete = {
     {"mulh", "REG_RS2"},
     {"mulhu", "REG_RS2"},
     {"mulhsu", "REG_RS2"},
+
+    {"clmul", "REG_RS2"},   // Zbc: carry-less multiply (R-type, emits -rs1/-rs2)
+    {"clmulh", "REG_RS2"},
+    {"clmulr", "REG_RS2"},
+
+    // Zbb two-source (R-type, case 0x33 -> emits -rs1/-rs2)
+    {"andn", "REG_RS2"},
+    {"orn", "REG_RS2"},
+    {"xnor", "REG_RS2"},
+    {"min", "REG_RS2"},
+    {"minu", "REG_RS2"},
+    {"max", "REG_RS2"},
+    {"maxu", "REG_RS2"},
+    {"rol", "REG_RS2"},
+    {"ror", "REG_RS2"},
+
+    // Zba shift-add + Zbs single-bit register forms (R-type, case 0x33 -> -rs1/-rs2)
+    {"sh1add", "REG_RS2"},
+    {"sh2add", "REG_RS2"},
+    {"sh3add", "REG_RS2"},
+    {"bclr", "REG_RS2"},
+    {"bset", "REG_RS2"},
+    {"binv", "REG_RS2"},
+    {"bext", "REG_RS2"},
     {"div", "REG_RS2"},
     {"divu", "REG_RS2"},
     {"rem", "REG_RS2"},
@@ -263,16 +304,16 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
   switch (insn.opcode()){   
     case 0x03: /*load rd rs1 imm*/
     {
-      leaks.add_leak(name, insn.i_imm()+RS1, insn.rs1());
+      leaks.add_leak(std::string(name)+"-rs1", insn.i_imm()+RS1, insn.rs1());
       break;
-    }  
+    }
     case 0x0f:/*fence , fence iorw, iorw*/
     {
         break;
     }
     case 0x13: /*op-imm rd rs1 imm*/
     {
-        leaks.add_leak(name, RS1, insn.rs1());
+        leaks.add_leak(std::string(name)+"-rs1", RS1, insn.rs1());
       
       break;
     }
@@ -285,7 +326,7 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
     }
     case 0x23:  /*store rs2 imm(rs1)*/
     {
-      leaks.add_leak(name, insn.s_imm()+RS1, insn.rs1());
+      leaks.add_leak(std::string(name)+"-rs1", insn.s_imm()+RS1, insn.rs1());
       break;
     }
     case 0x33:   /*op rd rs1 rs2*/
