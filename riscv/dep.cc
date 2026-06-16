@@ -312,7 +312,7 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
       dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       break;
     }   
-    case 0x13: /*op-imm rd rs1 imm*/
+    case 0x13: case 0x1B: /*op-imm / op-imm-32 rd rs1 imm*/
     {
       if (insn.rd() != 0) {
         dep_tracker.track_dependency(rd, rs1, RS1_INDEX, 0b11, false, INIT_STATE::OVERWRITE);
@@ -344,7 +344,7 @@ void add_dependency(Dep_tracker &dep_tracker, reg_t pc, insn_t insn, processor_t
       dep_tracker.track_dependency(Target::PC, Target::PC, PC_INDEX, 0b11, false, INIT_STATE::ADD);
       break;
     }
-    case 0x33:   /*op rd rs1 rs2*/
+    case 0x33: case 0x3B:   /*op / opw rd rs1 rs2 (RV32M + RV64-M)*/
     {
       if (insn.rd() != 0) {
         if (insn.rs1() != 0){

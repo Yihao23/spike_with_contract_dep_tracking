@@ -260,6 +260,26 @@ std::unordered_map <std::string, std::string> contract_templete = {
     {"divu", "REG_RS2"},
     {"rem", "REG_RS2"},
     {"remu", "REG_RS2"},
+
+    // RV64-M word divides (R-type opcode 0x3B; iterative divider -> LEAK candidates)
+    {"divw", "REG_RS2"},
+    {"divuw", "REG_RS2"},
+    {"remw", "REG_RS2"},
+    {"remuw", "REG_RS2"},
+
+    // RV64 W-variant ALU (Phase 3, expected NON-LEAK constant-time).
+    // R-type opcode 0x3B (-rs1/-rs2):
+    {"addw", "REG_RS2"},
+    {"subw", "REG_RS2"},
+    {"sllw", "REG_RS2"},
+    {"srlw", "REG_RS2"},
+    {"sraw", "REG_RS2"},
+    {"mulw", "REG_RS2"},
+    // I-type opcode 0x1B (-rs1):
+    {"addiw", "REG_RS1"},
+    {"slliw", "REG_RS1"},
+    {"srliw", "REG_RS1"},
+    {"sraiw", "REG_RS1"},
 };
 
 
@@ -311,10 +331,10 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
     {
         break;
     }
-    case 0x13: /*op-imm rd rs1 imm*/
+    case 0x13: case 0x1B: /*op-imm / op-imm-32 rd rs1 imm (addi.../addiw...)*/
     {
         leaks.add_leak(std::string(name)+"-rs1", RS1, insn.rs1());
-      
+
       break;
     }
     case 0x17: /*auipc, auipc rd, imm20*/
@@ -329,7 +349,7 @@ void add_leakage(Leakage &leaks, reg_t npc, insn_t insn, insn_func_t func, proce
       leaks.add_leak(std::string(name)+"-rs1", insn.s_imm()+RS1, insn.rs1());
       break;
     }
-    case 0x33:   /*op rd rs1 rs2*/
+    case 0x33: case 0x3B:   /*op / opw rd rs1 rs2 (RV32M + RV64-M mulw/divw/...)*/
     {
       if (insn.rs1() != 0) {
         leaks.add_leak(std::string(name)+"-rs1", RS1, insn.rs1());
